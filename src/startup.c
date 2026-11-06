@@ -436,6 +436,7 @@ void StartUp(Bool defaultScreenOnly)
 	memset(&wKeyBindings, 0, sizeof(wKeyBindings));
 
 	w_global.context.client_win = XUniqueContext();
+	w_global.context.user_time_win = XUniqueContext();
 	w_global.context.app_win = XUniqueContext();
 	w_global.context.stack = XUniqueContext();
 

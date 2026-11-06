@@ -532,6 +532,9 @@ extern struct wmaker_global_variables {
 		/* ts on the last time we did XSetInputFocus() */
 		Time focus_change;
 
+		/* ts of the last key or button event, for focus-stealing checks */
+		Time last_user_input;
+
 	} timestamp;
 
 	/* Global Domains, for storing dictionaries */
@@ -616,6 +619,7 @@ extern struct wmaker_global_variables {
 	/* X Contexts */
 	struct {
 		XContext client_win;
+		XContext user_time_win;	/* _NET_WM_USER_TIME_WINDOW -> WWindow */
 		XContext app_win;
 		XContext stack;
 	} context;

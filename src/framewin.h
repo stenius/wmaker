@@ -142,6 +142,7 @@ typedef struct WFrameWindow {
 #endif
 
         unsigned int repaint_only_titlebar:1;
+        unsigned int attention:1;		/* draw the demands-attention marker */
         unsigned int repaint_only_resizebar:1;
 
         unsigned int is_client_window_frame:1;

@@ -1098,6 +1098,22 @@ void wFrameWindowPaint(WFrameWindow * fwin)
 			wfree(title);
 		}
 
+		if (fwin->flags.attention) {
+			/* _NET_WM_STATE_DEMANDS_ATTENTION: accent bar along the
+			 * bottom of the titlebar, with a dark outline */
+			int bar = 3;
+			int th = fwin->titlebar->height;
+			int tw = fwin->titlebar->width;
+
+			if (!scr->attention_color)
+				scr->attention_color = WMCreateNamedColor(scr->wmscreen, "#ff9a1f", True);
+			XSetForeground(dpy, scr->copy_gc, WMColorPixel(scr->black));
+			XFillRectangle(dpy, fwin->titlebar->window, scr->copy_gc, 0, th - bar - 1, tw, bar + 1);
+			XSetForeground(dpy, scr->copy_gc,
+				       WMColorPixel(scr->attention_color ? scr->attention_color : scr->white));
+			XFillRectangle(dpy, fwin->titlebar->window, scr->copy_gc, 1, th - bar, tw - 2, bar - 1);
+		}
+
 		if (fwin->left_button)
 			handleButtonExpose(&fwin->left_button->descriptor, NULL);
 		if (fwin->right_button)
