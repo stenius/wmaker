@@ -135,6 +135,8 @@ static Atom net_frame_extents;
 
 /* Window Manager Protocols */
 static Atom net_wm_ping;	/* TODO */
+static Atom net_wm_sync_request;
+static Atom net_wm_sync_request_counter;
 
 static Atom utf8_string;
 
@@ -221,6 +223,8 @@ static atomitem_t atomNames[] = {
 	{"_NET_FRAME_EXTENTS", &net_frame_extents},
 
 	{"_NET_WM_PING", &net_wm_ping},
+	{"_NET_WM_SYNC_REQUEST", &net_wm_sync_request},
+	{"_NET_WM_SYNC_REQUEST_COUNTER", &net_wm_sync_request_counter},
 
 	{"UTF8_STRING", &utf8_string},
 };
@@ -321,6 +325,7 @@ static void setSupportedHints(WScreen *scr)
 	atom[i++] = net_wm_window_opacity;
 
 	atom[i++] = net_frame_extents;
+	atom[i++] = net_wm_sync_request;
 
 	atom[i++] = net_wm_name;
 	atom[i++] = net_wm_icon_name;
@@ -1990,7 +1995,40 @@ void wNETWMCheckClientHintChange(WWindow *wwin, XPropertyEvent *event)
 		updateIconImage(wwin);
 	} else if (event->atom == net_wm_window_opacity) {
 		updateWindowOpacity(wwin);
+	} else if (event->atom == net_wm_sync_request_counter) {
+		wNETWMReadSyncCounter(wwin);
 	}
+}
+
+Bool wNETWMIsSyncRequestAtom(Atom atom)
+{
+	return atom == net_wm_sync_request;
+}
+
+Atom wNETWMSyncRequestAtom(void)
+{
+	return net_wm_sync_request;
+}
+
+/* _NET_WM_SYNC_REQUEST_COUNTER: the XSync counter the client bumps after
+ * repainting for a configure we tagged with a sync request */
+void wNETWMReadSyncCounter(WWindow *wwin)
+{
+	Atom type_ret;
+	int fmt_ret;
+	unsigned long nitems_ret, bytes_after_ret;
+	unsigned long *data = NULL;
+
+	wwin->sync.counter = None;
+	if (XGetWindowProperty(dpy, wwin->client_win, net_wm_sync_request_counter, 0, 1, False,
+			       XA_CARDINAL, &type_ret, &fmt_ret, &nitems_ret, &bytes_after_ret,
+			       (unsigned char **)&data) == Success && data) {
+		if (type_ret == XA_CARDINAL && fmt_ret == 32 && nitems_ret >= 1)
+			wwin->sync.counter = data[0];
+		XFree(data);
+	}
+	wwin->sync.waiting = 0;
+	wwin->sync.pending = 0;
 }
 
 int wNETWMGetPidForWindow(Window window)

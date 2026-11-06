@@ -578,6 +578,14 @@ At current time, it is not enabled by default because it is NOT recommended (bug
 @sc{Window Maker} only restart itself when the configuration change, to take into account the new
 screen size.
 
+@item --enable-xsync
+The @emph{XSync} extension lets @sc{Window Maker} honour the @emph{_NET_WM_SYNC_REQUEST} protocol:
+while a window is being resized interactively, each new size is sent to the client only after it
+has finished drawing the previous one, so the frame and the window contents stay in step
+(noticeable under a compositor).
+
+It is enabled by default when the extension is available (it is part of @emph{libXext}).
+
 @end table
 
 
