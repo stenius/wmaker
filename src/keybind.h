@@ -89,6 +89,7 @@ enum {
 	WKBD_MARK_JUMP,
 	WKBD_MARK_SWAP,
 	WKBD_EXPOSE,
+	WKBD_QUICKSWITCH,
 
 	/* window, menu */
 	WKBD_CLOSE,
