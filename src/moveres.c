@@ -207,8 +207,29 @@ static void mapPositionDisplay(WWindow * wwin, int x, int y, int w, int h)
 	WSetGeometryViewShownPosition(scr->gview, x, y);
 }
 
+/*
+ * showGeometry() XOR-draws guide lines on the root; a second identical call
+ * erases them. Remember what is currently drawn so that a configure applied
+ * from the frame-sync timer (outside the drag loop) can erase and redraw
+ * the guides around itself; otherwise the configure's root exposes wipe
+ * part of a guide and the loop's erase pass paints it back as residue.
+ */
+static struct {
+	Bool shown;
+	WWindow *wwin;
+	int x1, y1, x2, y2, direction;
+} guides;
+
 static void showGeometry(WWindow * wwin, int x1, int y1, int x2, int y2, int direction)
 {
+	guides.shown = !guides.shown;
+	guides.wwin = wwin;
+	guides.x1 = x1;
+	guides.y1 = y1;
+	guides.x2 = x2;
+	guides.y2 = y2;
+	guides.direction = direction;
+
 	WScreen *scr = wwin->screen_ptr;
 	Window root = scr->root_win;
 	GC gc = scr->line_gc;
@@ -1421,8 +1442,14 @@ static void syncTimerCallback(void *data)
 		wwarning("syncTimer: client reached %llu, pending=%d", wwin->sync.value, wwin->sync.pending);
 	wwin->sync.waiting = 0;
 	if (wwin->sync.pending) {
+		Bool redraw_guides = guides.shown && guides.wwin == wwin;
+
 		wwin->sync.pending = 0;
+		if (redraw_guides)
+			showGeometry(wwin, guides.x1, guides.y1, guides.x2, guides.y2, guides.direction);
 		syncResize(wwin, wwin->sync.px, wwin->sync.py, wwin->sync.pw, wwin->sync.ph);
+		if (redraw_guides)
+			showGeometry(wwin, guides.x1, guides.y1, guides.x2, guides.y2, guides.direction);
 	}
 }
 
@@ -2155,6 +2182,8 @@ static int getResizeDirection(WWindow * wwin, int x, int y, int dy, int flags)
 void wMouseResizeWindow(WWindow * wwin, XEvent * ev)
 {
 	WMHandlerID sync_timer = NULL;
+
+	guides.shown = False;
 	XEvent event;
 	WScreen *scr = wwin->screen_ptr;
 	Window root = scr->root_win;
