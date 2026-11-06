@@ -45,6 +45,7 @@
 #include "winspector.h"
 #include "workspace.h"
 #include "xinerama.h"
+#include "expose.h"
 #include "usermenu.h"
 #include "placement.h"
 #include "misc.h"
@@ -1547,6 +1548,7 @@ void wIconifyWindow(WWindow *wwin)
 				if (mini_preview) {
 					set_icon_minipreview(wwin->icon, mini_preview);
 					set_icon_expose_thumb(wwin->icon, mini_preview);
+					wExposeStoreThumb(wwin, mini_preview);
 					RReleaseImage(mini_preview);
 				} else {
 					const char *title;
