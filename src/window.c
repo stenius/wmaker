@@ -815,6 +815,7 @@ WWindow *wManageWindow(WScreen *scr, Window window)
 	}
 
 	PropGetProtocols(window, &wwin->protocols);
+	wNETWMReadSyncCounter(wwin);
 
 	if (!XGetTransientForHint(dpy, window, &wwin->transient_for)) {
 		wwin->transient_for = None;

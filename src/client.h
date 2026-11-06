@@ -26,6 +26,9 @@ void wClientRestore(WWindow *wwin);
 void wClientConfigure(WWindow *wwin, XConfigureRequestEvent *xcre);
 void wClientGetGravityOffsets(WWindow *wwin, int *ofs_x, int *ofs_y);
 void wClientSendProtocol(WWindow *wwin, Atom protocol, Time time);
+Bool wClientSyncCapable(WWindow *wwin);
+void wClientSendSyncRequest(WWindow *wwin, Time time);
+Bool wClientSyncDone(WWindow *wwin);
 void wClientKill(WWindow *wwin);
 void wClientCheckProperty(WWindow *wwin, XPropertyEvent *event);
 

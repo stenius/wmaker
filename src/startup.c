@@ -44,6 +44,9 @@
 #ifdef USE_RANDR
 #include <X11/extensions/Xrandr.h>
 #endif
+#ifdef USE_XSYNC
+#include <X11/extensions/sync.h>
+#endif
 
 #include "WindowMaker.h"
 #include "GNUstep.h"
@@ -618,6 +621,18 @@ void StartUp(Bool defaultScreenOnly)
 			else
 				wwarning(_("RandR version %d.%d found but RandR version >=1.3 required"), rr_major, rr_minor);
 		}
+	}
+#endif
+
+#ifdef USE_XSYNC
+	{
+		int sync_error_base, sync_major, sync_minor;
+
+		w_global.xext.sync.supported =
+		    XSyncQueryExtension(dpy, &w_global.xext.sync.event_base, &sync_error_base)
+		    && XSyncInitialize(dpy, &sync_major, &sync_minor);
+		if (!w_global.xext.sync.supported)
+			wwarning(_("XSync extension is not available, no frame synchronisation with clients"));
 	}
 #endif
 

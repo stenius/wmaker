@@ -640,6 +640,12 @@ extern struct wmaker_global_variables {
 			int event_base;
 		} randr;
 #endif
+#ifdef USE_XSYNC
+		struct {
+			Bool supported;
+			int event_base;
+		} sync;
+#endif
 
 		/*
 		 * If no extension were activated, we would end up with an empty
