@@ -31,6 +31,7 @@
 #include "window.h"
 #include "defaults.h"
 #include "switchpanel.h"
+#include "wmspec.h"
 #include "misc.h"
 #include "xinerama.h"
 
@@ -542,6 +543,8 @@ WSwitchPanel *wInitSwitchPanel(WScreen *scr, WWindow *curwin, Bool class_only)
 	if (panel->current >= 0)
 		changeImage(panel, panel->current, 1, False, False);
 
+	WMRealizeWidget(panel->win);
+	wNETWMSetWindowType(WMWidgetXID(panel->win), WNET_TYPE_NOTIFICATION, "switchpanel");
 	WMMapWidget(panel->win);
 
 	return panel;

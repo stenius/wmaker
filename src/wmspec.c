@@ -45,6 +45,9 @@
 #include "client.h"
 #include "appicon.h"
 #include "wmspec.h"
+#ifdef USE_MWM_HINTS
+# include "motif.h"
+#endif
 #include "icon.h"
 #include "stacking.h"
 #include "xinerama.h"
@@ -1190,11 +1193,13 @@ static int getWindowLayer(WWindow *wwin)
 	} else if (wwin->type == net_wm_window_type_popup_menu) {
 		layer = WMSubmenuLevel;
 	} else if (wwin->type == net_wm_window_type_tooltip) {
+		layer = WMPopUpLevel;
 	} else if (wwin->type == net_wm_window_type_notification) {
 		layer = WMPopUpLevel;
 	} else if (wwin->type == net_wm_window_type_combo) {
 		layer = WMSubmenuLevel;
 	} else if (wwin->type == net_wm_window_type_dnd) {
+		layer = WMPopUpLevel;
 	} else if (wwin->type == net_wm_window_type_normal) {
 	}
 
@@ -1406,7 +1411,7 @@ static Bool handleWindowType(WWindow *wwin, Atom type, int *layer)
 		   // wwin->client_flags.skip_window_list = 1;
 		   // wwin->client_flags.no_appicon = 1;
 		 */
-	} else if (wwin->type == net_wm_window_type_tooltip) {
+	} else if (type == net_wm_window_type_tooltip) {
 		wwin->client_flags.no_titlebar = 1;
 		wwin->client_flags.no_resizable = 1;
 		wwin->client_flags.no_miniaturizable = 1;
@@ -1419,7 +1424,7 @@ static Bool handleWindowType(WWindow *wwin, Atom type, int *layer)
 		wwin->client_flags.no_appicon = 1;
 		wwin->client_flags.no_focusable = 1;
 		wwin->flags.net_skip_pager = 1;
-	} else if (wwin->type == net_wm_window_type_notification) {
+	} else if (type == net_wm_window_type_notification) {
 		wwin->client_flags.no_titlebar = 1;
 		wwin->client_flags.no_resizable = 1;
 		wwin->client_flags.no_miniaturizable = 1;
@@ -1435,7 +1440,7 @@ static Bool handleWindowType(WWindow *wwin, Atom type, int *layer)
 		wwin->client_flags.no_appicon = 1;
 		wwin->client_flags.no_focusable = 1;
 		wwin->flags.net_skip_pager = 1;
-	} else if (wwin->type == net_wm_window_type_dnd) {
+	} else if (type == net_wm_window_type_dnd) {
 		wwin->client_flags.no_titlebar = 1;
 		wwin->client_flags.no_resizable = 1;
 		wwin->client_flags.no_miniaturizable = 1;
@@ -1470,6 +1475,42 @@ static Bool handleWindowType(WWindow *wwin, Atom type, int *layer)
 	return ret;
 }
 
+/*
+ * Type one of our own windows (menu, dock tile, balloon, panel) so that
+ * compositors and other clients can tell them apart.  Also sets WM_CLASS
+ * to "<name>", "WindowMaker" for rule matching by class.
+ */
+void wNETWMSetWindowType(Window win, int wtype, const char *name)
+{
+	/* interned here rather than taken from the static atoms above: this
+	 * runs for screen-internal windows before wNETWMInitStuff() */
+	static const char *const type_names[] = {
+		[WNET_TYPE_NORMAL] = "_NET_WM_WINDOW_TYPE_NORMAL",
+		[WNET_TYPE_DOCK] = "_NET_WM_WINDOW_TYPE_DOCK",
+		[WNET_TYPE_MENU] = "_NET_WM_WINDOW_TYPE_MENU",
+		[WNET_TYPE_POPUP_MENU] = "_NET_WM_WINDOW_TYPE_POPUP_MENU",
+		[WNET_TYPE_TOOLTIP] = "_NET_WM_WINDOW_TYPE_TOOLTIP",
+		[WNET_TYPE_NOTIFICATION] = "_NET_WM_WINDOW_TYPE_NOTIFICATION",
+		[WNET_TYPE_UTILITY] = "_NET_WM_WINDOW_TYPE_UTILITY",
+		[WNET_TYPE_DND] = "_NET_WM_WINDOW_TYPE_DND",
+	};
+	Atom prop, type;
+	XClassHint class_hint;
+
+	if (wtype < 0 || wtype >= (int)wlengthof(type_names))
+		wtype = WNET_TYPE_NORMAL;
+
+	prop = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
+	type = XInternAtom(dpy, type_names[wtype], False);
+	XChangeProperty(dpy, win, prop, XA_ATOM, 32, PropModeReplace, (unsigned char *)&type, 1);
+
+	if (name) {
+		class_hint.res_name = (char *)name;
+		class_hint.res_class = (char *)"WindowMaker";
+		XSetClassHint(dpy, win, &class_hint);
+	}
+}
+
 void wNETWMPositionSplash(WWindow *wwin, int *x, int *y, int width, int height)
 {
 	if (wwin->type == net_wm_window_type_splash) {
@@ -1480,6 +1521,26 @@ void wNETWMPositionSplash(WWindow *wwin, int *x, int *y, int width, int height)
 	}
 }
 
+/* flags that handleWindowType() may set, reset before applying a new type */
+static void clearWindowTypeFlags(WWindow *wwin)
+{
+	wwin->client_flags.no_titlebar = 0;
+	wwin->client_flags.no_resizable = 0;
+	wwin->client_flags.no_miniaturizable = 0;
+	wwin->client_flags.no_border = 0;
+	wwin->client_flags.no_resizebar = 0;
+	wwin->client_flags.no_shadeable = 0;
+	wwin->client_flags.no_movable = 0;
+	wwin->client_flags.skip_window_list = 0;
+	wwin->client_flags.skip_switchpanel = 0;
+	wwin->client_flags.dont_move_off = 0;
+	wwin->client_flags.no_appicon = 0;
+	wwin->client_flags.no_focusable = 0;
+	wwin->client_flags.omnipresent = 0;
+	wwin->client_flags.no_hide_others = 0;
+	wwin->flags.net_skip_pager = 0;
+}
+
 static void updateWindowType(WWindow *wwin)
 {
 	Atom type_ret;
@@ -1488,12 +1549,19 @@ static void updateWindowType(WWindow *wwin)
 	unsigned long nitems_ret, bytes_after_ret;
 	long *data = NULL;
 
-	if (XGetWindowProperty(dpy, wwin->client_win, net_wm_window_type, 0, 1,
+	if (XGetWindowProperty(dpy, wwin->client_win, net_wm_window_type, 0, 1024,
 			       False, XA_ATOM, &type_ret, &fmt_ret, &nitems_ret,
 			       &bytes_after_ret, (unsigned char **)&data) == Success && data) {
 
 		int i;
 		Atom *type = (Atom *) data;
+
+		/* drop what the previous type set, then let the Motif hints
+		 * speak again before the new type is applied */
+		clearWindowTypeFlags(wwin);
+#ifdef USE_MWM_HINTS
+		wMWMCheckClientHints(wwin);
+#endif
 		for (i = 0; i < nitems_ret; ++i) {
 			if (handleWindowType(wwin, type[i], &layer))
 				break;
