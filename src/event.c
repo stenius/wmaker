@@ -76,6 +76,7 @@
 #include "winmenu.h"
 #include "switchmenu.h"
 #include "expose.h"
+#include "quickpanel.h"
 #include "wsmap.h"
 
 
@@ -1078,6 +1079,11 @@ static void handleClientMessage(XEvent * event)
 
 			if (scr)
 				wExposeStart(scr);
+		} else if (strncmp(command, "QuickSwitch", sizeof("QuickSwitch")) == 0) {
+			WScreen *scr = wScreenForRootWindow(event->xclient.window);
+
+			if (scr)
+				wQuickPanelShow(scr);
 		} else {
 			wwarning(_("Got unknown command %s"), command);
 		}
@@ -1829,6 +1835,10 @@ static void dispatchWKBDCommand(int command, WScreen *scr, WWindow *wwin, XEvent
 
 	case WKBD_EXPOSE:
 		wExposeStart(scr);
+		break;
+
+	case WKBD_QUICKSWITCH:
+		wQuickPanelShow(scr);
 		break;
 
 	case WKBD_WORKSPACE1 ... WKBD_WORKSPACE10:
