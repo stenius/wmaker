@@ -82,6 +82,8 @@ Atom wNETWMSyncRequestAtom(void);
 void wNETWMReadSyncCounter(WWindow *wwin);
 void wNETWMReadUserTime(WWindow *wwin);
 void wNETWMUpdateState(WWindow *wwin);
+void wNETWMReadGtkFrameExtents(WWindow *wwin);
+void wNETWMUpdateWindowType(WWindow *wwin);
 void wNETCleanupFrameExtents(WWindow *wwin);
 RImage *get_window_image_from_x11(Window window);
 #endif

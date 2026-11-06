@@ -305,6 +305,8 @@ static void setupGNUstepHints(WWindow *wwin, GNUstepWMAttributes *gs_hints)
 		wwin->client_flags.no_appicon = 1;
 }
 
+static int bringVisibleInside(WWindow *wwin, int *x, int *y, int width, int height);
+
 static void discard_hints_from_gtk(WWindow *wwin)
 {
 	Atom type;
@@ -313,15 +315,21 @@ static void discard_hints_from_gtk(WWindow *wwin)
 	unsigned char *result;
 	int status;
 
+	/* a client-side decorated window must not get a second titlebar */
+	if (wwin->flags.has_gtk_extents)
+		return;
+
 	status = XGetWindowProperty(dpy, wwin->client_win, w_global.atom.desktop.gtk_object_path, 0, 16, False,
 	                            AnyPropertyType, &type, &format, &nb_item, &nb_remain, &result);
 	if (status != Success)
 		return;
-
-	/* If we're here, that means the Property exists. We don't care what is inside, it means it is a GTK-based application */
-
 	if (result != NULL)
 		XFree(result);
+	/* Success is also returned when the property does not exist */
+	if (type == None)
+		return;
+
+	/* If we're here, that means the Property exists. We don't care what is inside, it means it is a GTK-based application */
 
 	/* GTK is asking to remove these decorations: */
 	wwin->client_flags.no_titlebar = 0;
@@ -1107,7 +1115,7 @@ WWindow *wManageWindow(WScreen *scr, Window window)
 				x = rect.pos.x + (x * rect.size.width) / scr->scr_width;
 				y = rect.pos.y + (y * rect.size.height) / scr->scr_height;
 
-				wScreenBringInside(scr, &x, &y, width, height);
+				bringVisibleInside(wwin, &x, &y, width, height);
 			}
 		} else if ((wwin->transient_for == None || wPreferences.window_placement != WPM_MANUAL)
 			   && !scr->flags.startup
@@ -1209,7 +1217,7 @@ WWindow *wManageWindow(WScreen *scr, Window window)
 		}
 
 		if (WFLAGP(wwin, dont_move_off) && dontBring)
-			wScreenBringInside(scr, &x, &y, width, height);
+			bringVisibleInside(wwin, &x, &y, width, height);
 	}
 
 	wNETWMPositionSplash(wwin, &x, &y, width, height);
@@ -2239,7 +2247,7 @@ void wWindowConfigure(WWindow *wwin, int req_x, int req_y, int req_width, int re
 	resize = (req_width != wwin->client.width || req_height != wwin->client.height);
 
 	if (WFLAGP(wwin, dont_move_off))
-		wScreenBringInside(wwin->screen_ptr, &req_x, &req_y, req_width, req_height);
+		bringVisibleInside(wwin, &req_x, &req_y, req_width, req_height);
 
 	if (resize) {
 		if (req_width < MIN_WINDOW_SIZE)
@@ -2327,7 +2335,7 @@ void wWindowMove(WWindow *wwin, int req_x, int req_y)
 #endif
 
 	if (WFLAGP(wwin, dont_move_off))
-		wScreenBringInside(wwin->screen_ptr, &req_x, &req_y,
+		bringVisibleInside(wwin, &req_x, &req_y,
 				   wwin->frame->core->width, wwin->frame->core->height);
 
 	wwin->client.x = req_x;
@@ -2821,6 +2829,57 @@ void wWindowResetMouseGrabs(WWindow * wwin)
 			    True, ButtonPressMask | ButtonReleaseMask, GrabModeSync, GrabModeAsync, None, None);
 	}
 	XFlush(dpy);
+}
+
+/*
+ * The part of the frame a user actually sees: the frame rectangle with
+ * its X border, minus the _GTK_FRAME_EXTENTS shadow margins of a
+ * client-side decorated window. Layout decisions should use this.
+ */
+void wWindowVisibleRect(WWindow *wwin, int *x, int *y, int *width, int *height)
+{
+	int bw = HAS_BORDER(wwin) ? wwin->screen_ptr->frame_border_width : 0;
+	int w = wwin->frame->core->width + 2 * bw;
+	int h = wwin->frame->core->height + 2 * bw;
+	int l = 0, t = 0;
+
+	if (wwin->flags.has_gtk_extents) {
+		l = wwin->gtk_extents.left;
+		t = wwin->gtk_extents.top;
+		w -= wwin->gtk_extents.left + wwin->gtk_extents.right;
+		h -= wwin->gtk_extents.top + wwin->gtk_extents.bottom;
+		if (w < 1)
+			w = 1;
+		if (h < 1)
+			h = 1;
+	}
+	*x = wwin->frame_x + l;
+	*y = wwin->frame_y + t;
+	*width = w;
+	*height = h;
+}
+
+/* wScreenBringInside() on the visible rectangle of a window whose client
+ * size is width x height and whose frame would sit at *x, *y */
+static int bringVisibleInside(WWindow *wwin, int *x, int *y, int width, int height)
+{
+	int vx, vy, r;
+
+	if (!wwin->flags.has_gtk_extents)
+		return wScreenBringInside(wwin->screen_ptr, x, y, width, height);
+
+	vx = *x + wwin->gtk_extents.left;
+	vy = *y + wwin->gtk_extents.top;
+	width -= wwin->gtk_extents.left + wwin->gtk_extents.right;
+	height -= wwin->gtk_extents.top + wwin->gtk_extents.bottom;
+	if (width < 1)
+		width = 1;
+	if (height < 1)
+		height = 1;
+	r = wScreenBringInside(wwin->screen_ptr, &vx, &vy, width, height);
+	*x = vx - wwin->gtk_extents.left;
+	*y = vy - wwin->gtk_extents.top;
+	return r;
 }
 
 /*

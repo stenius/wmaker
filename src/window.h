@@ -246,6 +246,12 @@ typedef struct WWindow {
 	/* protocols */
 	WProtocols protocols;			/* accepted WM_PROTOCOLS */
 
+	/* _GTK_FRAME_EXTENTS: invisible shadow margins of a client-side
+	 * decorated window, inside the client area */
+	struct {
+		int left, right, top, bottom;
+	} gtk_extents;
+
 	/* focus-stealing prevention */
 	Time user_time;				/* _NET_WM_USER_TIME, 0 = never focus on map */
 	Window user_time_window;		/* _NET_WM_USER_TIME_WINDOW, None if unset */
@@ -281,6 +287,7 @@ typedef struct WWindow {
 		unsigned int urgent:1;		/* if wm_hints says this is urgent */
 		unsigned int demands_attention:1;	/* _NET_WM_STATE_DEMANDS_ATTENTION */
 		unsigned int has_user_time:1;	/* _NET_WM_USER_TIME was read */
+		unsigned int has_gtk_extents:1;	/* gtk_extents is meaningful */
 #ifdef USE_XSHAPE
 		unsigned int shaped:1;
 #endif
@@ -408,6 +415,7 @@ void wWindowSetupInitialAttributes(WWindow *wwin, int *level, int *workspace);
 
 void wWindowUpdateGNUstepAttr(WWindow *wwin, GNUstepWMAttributes *attr);
 void wWindowSetAttention(WWindow *wwin, Bool on);
+void wWindowVisibleRect(WWindow *wwin, int *x, int *y, int *width, int *height);
 Bool wWindowMayTakeFocus(WWindow *wwin);
 
 void wWindowMap(WWindow *wwin);

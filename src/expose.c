@@ -265,14 +265,23 @@ static RImage *captureFrame(WScreen *scr, WWindow *wwin)
 	w = attr.width;
 	h = attr.height;
 
-	/* XGetImage refuses rectangles that fall outside the screen */
-	if (x < 0) {
-		ox = -x;
-		w -= ox;
+	if (wwin->flags.has_gtk_extents) {
+		/* leave the invisible shadow margins out of the thumbnail */
+		ox = wwin->gtk_extents.left;
+		oy = wwin->gtk_extents.top;
+		w -= wwin->gtk_extents.left + wwin->gtk_extents.right;
+		h -= wwin->gtk_extents.top + wwin->gtk_extents.bottom;
 	}
-	if (y < 0) {
+
+	/* XGetImage refuses rectangles that fall outside the screen;
+	 * (x + ox, y + oy) is where the captured area starts on the root */
+	if (x + ox < 0) {
+		w += x + ox;
+		ox = -x;
+	}
+	if (y + oy < 0) {
+		h += y + oy;
 		oy = -y;
-		h -= oy;
 	}
 	if (x + ox + w > scr->scr_width)
 		w = scr->scr_width - (x + ox);

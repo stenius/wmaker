@@ -229,10 +229,15 @@ int wGetHeadForWindow(WWindow * wwin)
 	if (wwin == NULL || wwin->frame == NULL)
 		return 0;
 
-	rect.pos.x = wwin->frame_x;
-	rect.pos.y = wwin->frame_y;
-	rect.size.width = wwin->frame->core->width;
-	rect.size.height = wwin->frame->core->height;
+	{
+		int x, y, w, h;
+
+		wWindowVisibleRect(wwin, &x, &y, &w, &h);
+		rect.pos.x = x;
+		rect.pos.y = y;
+		rect.size.width = w;
+		rect.size.height = h;
+	}
 
 	return wGetHeadForRect(wwin->screen_ptr, rect);
 }

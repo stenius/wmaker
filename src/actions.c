@@ -610,10 +610,22 @@ void wMaximizeWindow(WWindow *wwin, int directions, int head)
 	if ((wwin->flags.old_maximized & MAX_MAXIMUS) && !wwin->flags.maximized)
 		wwin->flags.maximized = MAX_MAXIMUS;
 
+	if (wwin->flags.has_gtk_extents && (directions & ~MAX_KEYBOARD)) {
+		/* let the shadow margins hang outside the target area */
+		new_x -= wwin->gtk_extents.left;
+		new_y -= wwin->gtk_extents.top;
+		new_width += wwin->gtk_extents.left + wwin->gtk_extents.right;
+		new_height += wwin->gtk_extents.top + wwin->gtk_extents.bottom;
+	}
+
 	wWindowConstrainSize(wwin, &new_width, &new_height);
 
-	wWindowCropSize(wwin, usableArea.x2 - usableArea.x1,
-			usableArea.y2 - usableArea.y1, &new_width, &new_height);
+	wWindowCropSize(wwin,
+			usableArea.x2 - usableArea.x1
+			+ (wwin->flags.has_gtk_extents ? wwin->gtk_extents.left + wwin->gtk_extents.right : 0),
+			usableArea.y2 - usableArea.y1
+			+ (wwin->flags.has_gtk_extents ? wwin->gtk_extents.top + wwin->gtk_extents.bottom : 0),
+			&new_width, &new_height);
 
 	wWindowConfigure(wwin, new_x, new_y, new_width, new_height);
 	wWindowSynthConfigureNotify(wwin);
