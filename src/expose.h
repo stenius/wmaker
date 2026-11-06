@@ -21,6 +21,7 @@
 #define WMEXPOSE_H
 
 #include "screen.h"
+#include "window.h"
 
 /*
  * Show a grid of thumbnails of every window on the current workspace of
@@ -39,5 +40,12 @@ void wExposeStart(WScreen *scr);
  * such as timer callbacks.
  */
 void wExposeRequest(WScreen *scr);
+
+/*
+ * Keep a copy of a window capture in a property on the client window, so
+ * the overview can still show it after a Window Maker restart.  Called from
+ * wIconifyWindow() with the full-size screenshot.
+ */
+void wExposeStoreThumb(struct WWindow *wwin, RImage *image);
 
 #endif /* WMEXPOSE_H */

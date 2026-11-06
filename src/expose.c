@@ -157,6 +157,97 @@ static int collectWindows(WScreen *scr, ExposeCell **out)
 /* ---------------------------------------------------------------------- */
 /* thumbnails                                                              */
 
+/*
+ * Captures taken at minimize time also go into a property on the client
+ * window, so they survive a Window Maker restart (WIcon->expose_thumb does
+ * not).  Layout: CARDINAL/32 array [width, height, 0xRRGGBB * width*height].
+ */
+#define EXPOSE_PROP_NAME   "_WINDOWMAKER_EXPOSE_THUMB"
+#define EXPOSE_PROP_MAX    400	/* longest side stored, keeps it under 640 KB */
+
+static Atom exposeThumbAtom(void)
+{
+	static Atom atom = None;
+
+	if (atom == None)
+		atom = XInternAtom(dpy, EXPOSE_PROP_NAME, False);
+	return atom;
+}
+
+void wExposeStoreThumb(WWindow *wwin, RImage *image)
+{
+	RImage *small = image;
+	unsigned long *buf;
+	unsigned int w = image->width, h = image->height, n, i;
+	int stride = (image->format == RRGBAFormat) ? 4 : 3;
+	unsigned char *src;
+
+	if (w > EXPOSE_PROP_MAX || h > EXPOSE_PROP_MAX) {
+		if (w >= h) {
+			h = h * EXPOSE_PROP_MAX / w;
+			w = EXPOSE_PROP_MAX;
+		} else {
+			w = w * EXPOSE_PROP_MAX / h;
+			h = EXPOSE_PROP_MAX;
+		}
+		if (w < 1)
+			w = 1;
+		if (h < 1)
+			h = 1;
+		small = RSmoothScaleImage(image, w, h);
+		if (!small)
+			return;
+		stride = (small->format == RRGBAFormat) ? 4 : 3;
+	}
+
+	n = w * h;
+	buf = wmalloc(sizeof(unsigned long) * (n + 2));
+	buf[0] = w;
+	buf[1] = h;
+	src = small->data;
+	for (i = 0; i < n; i++, src += stride)
+		buf[i + 2] = ((unsigned long)src[0] << 16) | ((unsigned long)src[1] << 8) | src[2];
+
+	XChangeProperty(dpy, wwin->client_win, exposeThumbAtom(), XA_CARDINAL, 32,
+			PropModeReplace, (unsigned char *)buf, n + 2);
+	wfree(buf);
+	if (small != image)
+		RReleaseImage(small);
+}
+
+static RImage *loadStoredThumb(WWindow *wwin)
+{
+	Atom type;
+	int format;
+	unsigned long nitems, after, *data = NULL, w, h, i;
+	unsigned char *dst;
+	RImage *img;
+
+	if (XGetWindowProperty(dpy, wwin->client_win, exposeThumbAtom(), 0,
+			       2 + (long)EXPOSE_PROP_MAX * EXPOSE_PROP_MAX, False, XA_CARDINAL,
+			       &type, &format, &nitems, &after, (unsigned char **)&data) != Success || !data)
+		return NULL;
+
+	img = NULL;
+	if (type == XA_CARDINAL && format == 32 && nitems >= 2) {
+		w = data[0];
+		h = data[1];
+		if (w >= 1 && h >= 1 && w <= EXPOSE_PROP_MAX && h <= EXPOSE_PROP_MAX && nitems >= 2 + w * h) {
+			img = RCreateImage(w, h, False);
+			if (img) {
+				dst = img->data;
+				for (i = 0; i < w * h; i++, dst += 3) {
+					dst[0] = (data[i + 2] >> 16) & 0xff;
+					dst[1] = (data[i + 2] >> 8) & 0xff;
+					dst[2] = data[i + 2] & 0xff;
+				}
+			}
+		}
+	}
+	XFree(data);
+	return img;
+}
+
 static RImage *captureFrame(WScreen *scr, WWindow *wwin)
 {
 	XWindowAttributes attr;
@@ -255,8 +346,14 @@ static void makeThumb(WScreen *scr, ExposeCell *cell, int max_w, int max_h)
 	if (wwin->flags.mapped && !wwin->flags.shaded) {
 		src = captureFrame(scr, wwin);
 		owned = (src != NULL);
-	} else if (wwin->flags.miniaturized && wwin->icon && wwin->icon->expose_thumb) {
-		src = wwin->icon->expose_thumb;
+	} else if (wwin->flags.miniaturized) {
+		if (wwin->icon && wwin->icon->expose_thumb) {
+			src = wwin->icon->expose_thumb;
+		} else {
+			/* minimized before this Window Maker instance started */
+			src = loadStoredThumb(wwin);
+			owned = (src != NULL);
+		}
 	}
 
 	if (src) {
@@ -432,8 +529,6 @@ static ExposePanel *createPanel(WScreen *scr)
 	WMRect rect;
 	XSetWindowAttributes attr;
 	XGCValues gcv;
-	Atom opacity_atom;
-	unsigned long opacity;
 	int count, i;
 
 	count = collectWindows(scr, &cells);
@@ -473,12 +568,6 @@ static ExposePanel *createPanel(WScreen *scr)
 	p->win = XCreateWindow(dpy, scr->root_win, p->x, p->y, p->width, p->height, 0,
 			       CopyFromParent, InputOutput, CopyFromParent,
 			       CWOverrideRedirect | CWSaveUnder | CWBackPixmap | CWEventMask, &attr);
-
-	/* let a compositor dim the desktop through the panel; harmless otherwise */
-	opacity_atom = XInternAtom(dpy, "_NET_WM_WINDOW_OPACITY", False);
-	opacity = (unsigned long)(0.94 * 0xffffffffUL);
-	XChangeProperty(dpy, p->win, opacity_atom, XA_CARDINAL, 32, PropModeReplace,
-			(unsigned char *)&opacity, 1);
 
 	gcv.foreground = WMColorPixel(scr->white);
 	p->gc = XCreateGC(dpy, scr->root_win, GCForeground, &gcv);
