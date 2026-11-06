@@ -32,6 +32,7 @@
 #include "misc.h"
 #include "workspace.h"
 #include "wsmap.h"
+#include "wmspec.h"
 
 #include "WINGs/WINGsP.h"
 
@@ -212,6 +213,7 @@ static void workspace_map_realize(WWorkspaceMap *wsmap, WMFrame *frame_border, W
 	WMSize label_size;
 
 	WMRealizeWidget(wsmap->win);
+	wNETWMSetWindowType(WMWidgetXID(wsmap->win), WNET_TYPE_NOTIFICATION, "wsmap");
 	set_workspace_map_background_image(wsmap);
 
 	frame_border_pixmap = get_frame_background_color(wsmap, wsmap->wswidth, wsmap->border_width, WS_FOCUSED);

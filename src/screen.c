@@ -574,6 +574,7 @@ static void createInternalWindows(WScreen * scr)
 	scr->dock_shadow =
 	    XCreateWindow(dpy, scr->root_win, 0, 0, wPreferences.icon_size,
 			  wPreferences.icon_size, 0, scr->w_depth, CopyFromParent, scr->w_visual, vmask, &attribs);
+	wNETWMSetWindowType(scr->dock_shadow, WNET_TYPE_DND, "dockshadow");
 
 	/* workspace name */
 	vmask = CWBackPixel | CWSaveUnder | CWOverrideRedirect | CWColormap | CWBorderPixel;
@@ -585,6 +586,7 @@ static void createInternalWindows(WScreen * scr)
 	scr->workspace_name =
 	    XCreateWindow(dpy, scr->root_win, 0, 0, 10, 10, 0, scr->w_depth,
 			  CopyFromParent, scr->w_visual, vmask, &attribs);
+	wNETWMSetWindowType(scr->workspace_name, WNET_TYPE_NOTIFICATION, "osd");
 	scr->mini_screenshot_timeout = 0;
 }
 

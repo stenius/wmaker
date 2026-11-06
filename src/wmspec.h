@@ -59,6 +59,19 @@ void wNETWMCheckClientHintChange(WWindow *wwin, XPropertyEvent *event);
 void wNETWMUpdateActions(WWindow *wwin, Bool del);
 void wNETWMUpdateDesktop(WScreen *scr);
 void wNETWMPositionSplash(WWindow *wwin, int *x, int *y, int width, int height);
+
+/* for wNETWMSetWindowType() */
+enum {
+	WNET_TYPE_NORMAL,
+	WNET_TYPE_DOCK,
+	WNET_TYPE_MENU,
+	WNET_TYPE_POPUP_MENU,
+	WNET_TYPE_TOOLTIP,
+	WNET_TYPE_NOTIFICATION,
+	WNET_TYPE_UTILITY,
+	WNET_TYPE_DND
+};
+void wNETWMSetWindowType(Window win, int wtype, const char *name);
 int wNETWMGetPidForWindow(Window window);
 int wNETWMGetCurrentDesktopFromHint(WScreen *scr);
 char *wNETWMGetIconName(Window window);

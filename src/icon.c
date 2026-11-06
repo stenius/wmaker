@@ -189,6 +189,8 @@ static WIcon *icon_create_core(WScreen *scr, int coord_x, int coord_y)
 					 0, scr->w_depth, scr->w_visual, scr->w_colormap,
 					 scr->white_pixel);
 
+	wNETWMSetWindowType(icon->core->window, WNET_TYPE_DOCK, "dock");
+
 	/* will be overriden if this is a application icon */
 	icon->core->descriptor.handle_mousedown = miniwindowMouseDown;
 	icon->core->descriptor.handle_expose = miniwindowExpose;

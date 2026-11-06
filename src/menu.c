@@ -35,6 +35,7 @@
 #include "wcore.h"
 #include "framewin.h"
 #include "menu.h"
+#include "wmspec.h"
 #include "actions.h"
 #include "winmenu.h"
 #include "stacking.h"
@@ -158,6 +159,7 @@ WMenu *wMenuCreate(WScreen *screen, const char *title, int main_menu)
 
 	menu->frame->core->descriptor.parent = menu;
 	menu->frame->core->descriptor.parent_type = WCLASS_MENU;
+	wNETWMSetWindowType(menu->frame->core->window, WNET_TYPE_POPUP_MENU, "menu");
 	menu->frame->core->descriptor.handle_mousedown = menuMouseDown;
 
 	wFrameWindowHideButton(menu->frame, WFF_RIGHT_BUTTON);
