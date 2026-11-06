@@ -54,6 +54,7 @@
 #include "shutdown.h"
 #include "dialog.h"
 #include "main.h"
+#include "autostart.h"
 #include "monitor.h"
 #include "misc.h"
 
@@ -806,12 +807,18 @@ static int real_main(int argc, char **argv)
 	setenv("DISPLAY", DisplayName, 1);
 
 	wXModifierInitialize();
+	/* lets OnlyShowIn/NotShowIn entries and desktop-aware apps know who we are */
+	setenv("XDG_CURRENT_DESKTOP", WMAKER_DESKTOP_NAME, 0);
+
 	StartUp(!multiHead);
 
 	if (w_global.screen_count == 1)
 		multiHead = False;
 
 	execInitScript();
+	/* XDG autostart only on a real login, not on a restart */
+	if (wPreferences.xdg_autostart && wPreferences.flags.restarting == 0)
+		wAutostartRun(wScreenWithNumber(0));
 #ifdef HAVE_INOTIFY
 	inotifyWatchConfig();
 #endif
