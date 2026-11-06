@@ -483,6 +483,7 @@ extern struct WPreferences {
 	char show_clip_title;
 
 	char hot_corners;                  /* let corners execute actions */
+	char xdg_autostart;                /* run ~/.config/autostart entries at login */
 	int hot_corner_delay;		   /* Delay after which the hot corner is triggered */
 	int hot_corner_edge;		   /* Hot corner edge size */
 	char *hot_corner_actions[4];	   /* Action of each corner */

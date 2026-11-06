@@ -13,6 +13,7 @@ EXTRA_DIST = be.po bg.po bs.po ca.po cs.po da.po de.po el.po es.po et.po \
 POTFILES  = \
 	$(top_srcdir)/src/actions.c \
 	$(top_srcdir)/src/appicon.c \
+	$(top_srcdir)/src/autostart.c \
 	$(top_srcdir)/src/application.c \
 	$(top_srcdir)/src/appmenu.c \
 	$(top_srcdir)/src/balloon.c \
@@ -21,6 +22,7 @@ POTFILES  = \
 	$(top_srcdir)/src/cycling.c \
 	$(top_srcdir)/src/expose.c \
 	$(top_srcdir)/src/defaults.c \
+	$(top_srcdir)/src/desktopentry.c \
 	$(top_srcdir)/src/dialog.c \
 	$(top_srcdir)/src/dock.c \
 	$(top_srcdir)/src/dockedapp.c \
