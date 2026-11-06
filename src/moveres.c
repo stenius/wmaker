@@ -599,12 +599,30 @@ typedef struct {
 	} snap;
 } MoveData;
 
-#define WTOP(w) (w)->frame_y
-#define WLEFT(w) (w)->frame_x
-#define WRIGHT(w) ((w)->frame_x + (int)(w)->frame->core->width - 1 + \
-    (HAS_BORDER_WITH_SELECT(w) ? 2*(w)->screen_ptr->frame_border_width : 0))
-#define WBOTTOM(w) ((w)->frame_y + (int)(w)->frame->core->height - 1 + \
-    (HAS_BORDER_WITH_SELECT(w) ? 2*(w)->screen_ptr->frame_border_width : 0))
+/* edges of other windows, as seen: without _GTK_FRAME_EXTENTS shadows */
+static int WTOP(WWindow *w)
+{
+	return w->frame_y + (w->flags.has_gtk_extents ? w->gtk_extents.top : 0);
+}
+
+static int WLEFT(WWindow *w)
+{
+	return w->frame_x + (w->flags.has_gtk_extents ? w->gtk_extents.left : 0);
+}
+
+static int WRIGHT(WWindow *w)
+{
+	return w->frame_x + (int)w->frame->core->width - 1
+	    + (HAS_BORDER_WITH_SELECT(w) ? 2 * w->screen_ptr->frame_border_width : 0)
+	    - (w->flags.has_gtk_extents ? w->gtk_extents.right : 0);
+}
+
+static int WBOTTOM(WWindow *w)
+{
+	return w->frame_y + (int)w->frame->core->height - 1
+	    + (HAS_BORDER_WITH_SELECT(w) ? 2 * w->screen_ptr->frame_border_width : 0)
+	    - (w->flags.has_gtk_extents ? w->gtk_extents.bottom : 0);
+}
 
 static int compareWTop(const void *a, const void *b)
 {

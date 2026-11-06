@@ -36,6 +36,7 @@
 #include "actions.h"
 #include "icon.h"
 #include "client.h"
+#include "motif.h"
 #include "wmspec.h"
 #include <time.h>
 #ifdef USE_XSYNC
@@ -707,6 +708,11 @@ void wClientCheckProperty(WWindow * wwin, XPropertyEvent * event)
 				wSetFocusTo(wwin->screen_ptr, NULL);
 				wSetFocusTo(wwin->screen_ptr, wwin->screen_ptr->focused_window);
 			}
+		} else if (event->atom == wMWMHintsAtom()) {
+			/* decorations toggled at runtime (GTK switching CSD on or off) */
+			if (!wwin->flags.is_gnustep)
+				wNETWMUpdateWindowType(wwin);
+
 		} else if (event->atom == w_global.atom.gnustep.wm_attr) {
 			GNUstepWMAttributes *attr;
 

@@ -46,6 +46,8 @@
     wPreferences.window_place_origin.y)
 
 /* Returns True if it is an icon and is in this workspace */
+static void window_rect(WWindow *wwin, int *x, int *y, int *w, int *h);
+
 static Bool
 iconPosition(WCoreWindow *wcore, int sx1, int sy1, int sx2, int sy2,
 	     int workspace, int *retX, int *retY)
@@ -272,10 +274,7 @@ static int calcSumOfCoveredAreas(WWindow *wwin, int x, int y, int w, int h)
 			continue;
 		}
 
-		tw = test_window->frame->core->width;
-		th = test_window->frame->core->height;
-		tx = test_window->frame_x;
-		ty = test_window->frame_y;
+		window_rect(test_window, &tx, &ty, &tw, &th);
 
 		if (test_window->flags.mapped || (test_window->flags.shaded &&
 		     test_window->frame->workspace == wwin->screen_ptr->current_workspace &&
@@ -301,6 +300,20 @@ static void set_width_height(WWindow *wwin, unsigned int *width, unsigned int *h
 		*height += 2 * wwin->screen_ptr->frame_border_width;
 		*width  += 2 * wwin->screen_ptr->frame_border_width;
 	}
+	if (wwin->flags.has_gtk_extents) {
+		/* place the visible part, not the shadow margins */
+		unsigned int dw = wwin->gtk_extents.left + wwin->gtk_extents.right;
+		unsigned int dh = wwin->gtk_extents.top + wwin->gtk_extents.bottom;
+
+		*width = (*width > dw) ? *width - dw : 1;
+		*height = (*height > dh) ? *height - dh : 1;
+	}
+}
+
+/* the rectangle a window occupies for layout purposes */
+static void window_rect(WWindow *wwin, int *x, int *y, int *w, int *h)
+{
+	wWindowVisibleRect(wwin, x, y, w, h);
 }
 
 static Bool
@@ -313,10 +326,7 @@ window_overlaps(WWindow *win, int x, int y, int w, int h, Bool ignore_sunken)
 		return False;
 	}
 
-	tw = win->frame->core->width;
-	th = win->frame->core->height;
-	tx = win->frame_x;
-	ty = win->frame_y;
+	window_rect(win, &tx, &ty, &tw, &th);
 
 	if ((tx < (x + w)) && ((tx + tw) > x) &&
 	    (ty < (y + h)) && ((ty + th) > y) &&
@@ -560,6 +570,15 @@ void PlaceWindow(WWindow *wwin, int *x_ret, int *y_ret, unsigned width, unsigned
 	 * this will also take dock/clip etc.. into account
 	 * as well as being xinerama friendly
 	 */
+	if (wwin->flags.has_gtk_extents) {
+		/* the shadow margins may hang off the edge; clip the visible part */
+		unsigned int dw = wwin->gtk_extents.left + wwin->gtk_extents.right;
+		unsigned int dh = wwin->gtk_extents.top + wwin->gtk_extents.bottom;
+
+		width = (width > dw) ? width - dw : 1;
+		height = (height > dh) ? height - dh : 1;
+	}
+
 	if (*x_ret + width > usableArea.x2)
 		*x_ret = usableArea.x2 - width;
 	if (*x_ret < usableArea.x1)
@@ -569,4 +588,11 @@ void PlaceWindow(WWindow *wwin, int *x_ret, int *y_ret, unsigned width, unsigned
 		*y_ret = usableArea.y2 - height;
 	if (*y_ret < usableArea.y1)
 		*y_ret = usableArea.y1;
+
+	/* placement was computed for the visible part; the frame itself
+	 * starts a shadow margin further up and left */
+	if (wwin->flags.has_gtk_extents) {
+		*x_ret -= wwin->gtk_extents.left;
+		*y_ret -= wwin->gtk_extents.top;
+	}
 }
