@@ -50,6 +50,9 @@
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
+#include <X11/Xft/Xft.h>
+
+#include <WINGs/WINGsP.h>	/* for the shared XftDraw, see destroyPanel() */
 
 #include "WindowMaker.h"
 #include "screen.h"
@@ -67,7 +70,7 @@
 
 #define EXPOSE_MARGIN     24	/* panel edge to first cell */
 #define EXPOSE_GAP        16	/* between cells */
-#define EXPOSE_BORDER      3	/* highlight line width */
+#define EXPOSE_BORDER      4	/* highlight ring, including a 1px outline on each side */
 #define EXPOSE_LABEL_PAD   6	/* above and below the title line */
 #define EXPOSE_ICON_SIZE  96	/* icon fallback size */
 
@@ -83,9 +86,11 @@ typedef struct {
 typedef struct {
 	WScreen *scr;
 	Window win;
-	Pixmap bg;
+	Pixmap base;		/* rendered thumbnails, never drawn on */
+	Pixmap bg;		/* base + highlight, the window background */
 	GC gc;
 	WMFont *font;
+	WMColor *accent;		/* highlight color */
 	int x, y, width, height;	/* panel geometry on the root window */
 	int cols, rows;
 	int cell_w, cell_h;		/* cell size, label included */
@@ -363,8 +368,19 @@ static void renderBackground(ExposePanel *p)
 		}
 	}
 
-	RConvertImage(p->scr->rcontext, bg, &p->bg);
+	RConvertImage(p->scr->rcontext, bg, &p->base);
 	RReleaseImage(bg);
+
+	p->bg = XCreatePixmap(dpy, p->scr->root_win, p->width, p->height, p->scr->w_depth);
+}
+
+/* a rectangular ring of the given thickness on the background pixmap */
+static void drawRing(ExposePanel *p, int x, int y, int w, int h, int t)
+{
+	XFillRectangle(dpy, p->bg, p->gc, x, y, w, t);
+	XFillRectangle(dpy, p->bg, p->gc, x, y + h - t, w, t);
+	XFillRectangle(dpy, p->bg, p->gc, x, y, t, h);
+	XFillRectangle(dpy, p->bg, p->gc, x + w - t, y, t, h);
 }
 
 static void redraw(ExposePanel *p)
@@ -372,16 +388,21 @@ static void redraw(ExposePanel *p)
 	WScreen *scr = p->scr;
 	int i;
 
-	XClearWindow(dpy, p->win);
+	/* Compose highlight into the background pixmap rather than drawing on
+	 * the window: it survives Expose events and avoids a visible clear. */
+	XCopyArea(dpy, p->base, p->bg, p->gc, 0, 0, p->width, p->height, 0, 0);
 
 	if (p->current >= 0 && p->current < p->count) {
 		ExposeCell *cell = &p->cells[p->current];
-		int half = EXPOSE_BORDER / 2;
+		int x = cell->tx - EXPOSE_BORDER, y = cell->ty - EXPOSE_BORDER;
+		int w = cell->tw + 2 * EXPOSE_BORDER, h = cell->th + 2 * EXPOSE_BORDER;
 
-		XSetForeground(dpy, p->gc, scr->white_pixel);
-		XDrawRectangle(dpy, p->win, p->gc,
-			       cell->tx - EXPOSE_BORDER + half, cell->ty - EXPOSE_BORDER + half,
-			       cell->tw + 2 * EXPOSE_BORDER - EXPOSE_BORDER, cell->th + 2 * EXPOSE_BORDER - EXPOSE_BORDER);
+		/* dark outline one pixel outside and inside the accent bars, so the
+		 * highlight reads against both light and dark window contents */
+		XSetForeground(dpy, p->gc, WMColorPixel(scr->black));
+		drawRing(p, x - 1, y - 1, w + 2, h + 2, EXPOSE_BORDER + 2);
+		XSetForeground(dpy, p->gc, WMColorPixel(p->accent));
+		drawRing(p, x, y, w, h, EXPOSE_BORDER);
 	}
 
 	for (i = 0; i < p->count; i++) {
@@ -392,10 +413,12 @@ static void redraw(ExposePanel *p)
 		int x = cell->x + (cell->w - tw) / 2;
 		int y = cell->y + cell->h - p->label_h + EXPOSE_LABEL_PAD;
 
-		WMDrawString(scr->wmscreen, p->win, i == p->current ? scr->white : scr->gray, p->font, x, y, s, len);
+		WMDrawString(scr->wmscreen, p->bg, i == p->current ? scr->white : scr->gray, p->font, x, y, s, len);
 		wfree(s);
 	}
 
+	XSetWindowBackgroundPixmap(dpy, p->win, p->bg);
+	XClearWindow(dpy, p->win);
 	XFlush(dpy);
 }
 
@@ -424,6 +447,9 @@ static ExposePanel *createPanel(WScreen *scr)
 	p->current = 0;
 	p->font = scr->info_text_font;
 	p->label_h = WMFontHeight(p->font) + 2 * EXPOSE_LABEL_PAD;
+	p->accent = WMCreateNamedColor(scr->wmscreen, "#ff9a1f", True);
+	if (!p->accent)
+		p->accent = WMRetainColor(scr->white);
 
 	rect = wGetRectForHead(scr, wGetHeadForPointerLocation(scr));
 	p->x = rect.pos.x;
@@ -441,7 +467,7 @@ static ExposePanel *createPanel(WScreen *scr)
 
 	attr.override_redirect = True;
 	attr.save_under = True;
-	attr.background_pixmap = p->bg;
+	attr.background_pixmap = p->base;
 	attr.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask
 	    | ButtonPressMask | ButtonReleaseMask | PointerMotionMask;
 	p->win = XCreateWindow(dpy, scr->root_win, p->x, p->y, p->width, p->height, 0,
@@ -454,9 +480,8 @@ static ExposePanel *createPanel(WScreen *scr)
 	XChangeProperty(dpy, p->win, opacity_atom, XA_CARDINAL, 32, PropModeReplace,
 			(unsigned char *)&opacity, 1);
 
-	gcv.line_width = EXPOSE_BORDER;
-	gcv.foreground = scr->white_pixel;
-	p->gc = XCreateGC(dpy, p->win, GCLineWidth | GCForeground, &gcv);
+	gcv.foreground = WMColorPixel(scr->white);
+	p->gc = XCreateGC(dpy, scr->root_win, GCForeground, &gcv);
 
 	return p;
 }
@@ -480,9 +505,19 @@ static void destroyPanel(ExposePanel *p)
 	ev.xclient.data.l[0] = False;
 	XSendEvent(dpy, scr->info_window, True, EnterWindowMask, &ev);
 
+	/* WMDrawString() re-points one shared XftDraw at whatever it last drew
+	 * on, which is our background pixmap. Freeing it would kill that
+	 * Picture, and the next text draw anywhere would then fail with
+	 * RenderBadPicture when Xft frees it. Move the XftDraw off the pixmap
+	 * while it still exists. */
+	if (scr->wmscreen->xftdraw)
+		XftDrawChange(scr->wmscreen->xftdraw, scr->root_win);
+
 	XFreeGC(dpy, p->gc);
 	XDestroyWindow(dpy, p->win);
 	XFreePixmap(dpy, p->bg);
+	XFreePixmap(dpy, p->base);
+	WMReleaseColor(p->accent);
 
 	for (i = 0; i < p->count; i++) {
 		if (p->cells[i].thumb)
@@ -643,12 +678,10 @@ static void runLoop(ExposePanel *p)
 			break;
 
 		case Expose:
-			if (ev.xexpose.window == p->win) {
-				if (ev.xexpose.count == 0)
-					redraw(p);
-			} else {
+			/* our window is fully covered by its background pixmap,
+			 * so the server repaints it; nothing to do for us */
+			if (ev.xexpose.window != p->win)
 				WMHandleEvent(&ev);
-			}
 			break;
 
 		default:
@@ -656,6 +689,20 @@ static void runLoop(ExposePanel *p)
 			break;
 		}
 	}
+}
+
+void wExposeRequest(WScreen *scr)
+{
+	XEvent ev;
+
+	memset(&ev, 0, sizeof(ev));
+	ev.xclient.type = ClientMessage;
+	ev.xclient.window = scr->root_win;
+	ev.xclient.message_type = w_global.atom.wmaker.command;
+	ev.xclient.format = 8;
+	strncpy(ev.xclient.data.b, "Expose", sizeof(ev.xclient.data.b));
+	XSendEvent(dpy, scr->root_win, False, SubstructureRedirectMask, &ev);
+	XFlush(dpy);
 }
 
 void wExposeStart(WScreen *scr)

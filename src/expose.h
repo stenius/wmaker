@@ -32,4 +32,12 @@
  */
 void wExposeStart(WScreen *scr);
 
+/*
+ * Ask the main event loop to open the overview, by sending the root window
+ * a _WINDOWMAKER_COMMAND "Expose" client message.  Use this from contexts
+ * where running the overview's nested event loop directly would be unsafe,
+ * such as timer callbacks.
+ */
+void wExposeRequest(WScreen *scr);
+
 #endif /* WMEXPOSE_H */

@@ -2350,17 +2350,21 @@ static void hotCornerDelay(void *data)
 	if (scr->flags.in_hot_corner)
 		action = wPreferences.hot_corner_actions[scr->flags.in_hot_corner - 1];
 
-	/* release the timer before acting: the Expose overview runs its own
-	 * event loop and would otherwise keep the handler alive until it closes */
 	WMDeleteTimerHandler(scr->hot_corner_timer);
 	scr->hot_corner_timer = NULL;
 
 	if (!action)
 		return;
-	if (strcmp(action, "EXPOSE") == 0)
-		wExposeStart(scr);
-	else
+	if (strcmp(action, "EXPOSE") == 0) {
+		/* We are inside a timer callback. The overview runs a nested
+		 * event loop, which would run the timer handlers again while
+		 * the outer walk still holds a pointer into the list (observed
+		 * use-after-free in W_CheckTimerHandlers). Defer to the main
+		 * loop by sending ourselves the "Expose" command instead. */
+		wExposeRequest(scr);
+	} else {
 		ExecuteShellCommand(scr, action);
+	}
 }
 
 static void handleMotionNotify(XEvent *event)
