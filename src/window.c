@@ -80,6 +80,7 @@
 # include "motif.h"
 #endif
 #include "wmspec.h"
+#include "wgeometry.h"
 
 #define MOD_MASK wPreferences.modifier_mask
 
@@ -1151,6 +1152,10 @@ WWindow *wManageWindow(WScreen *scr, Window window)
 				else if (y + height > rect.pos.y + rect.size.height)
 					y = rect.pos.y + rect.size.height - height;
 
+			} else if (wGeometryRecall(wwin, &x, &y, &width, &height)) {
+				/* where the user last left a window of this application */
+				wWindowConstrainSize(wwin, &width, &height);
+				bringVisibleInside(wwin, &x, &y, width, height);
 			} else {
 				PlaceWindow(wwin, &x, &y, width, height);
 			}
@@ -1643,6 +1648,8 @@ void wUnmanageWindow(WWindow *wwin, Bool restore, Bool destroyed)
 	/* Close window menu if it's open for this window */
 	if (wwin->flags.menu_open_for_me)
 		CloseWindowMenu(scr);
+
+	wGeometryRemember(wwin);
 
 	/* Don't restore focus to this window after a window exits
 	 * fullscreen mode */

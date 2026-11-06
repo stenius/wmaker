@@ -598,6 +598,9 @@ void StartUp(Bool defaultScreenOnly)
 	if (!w_global.domain.window_attr->dictionary)
 		wwarning(_("could not read domain \"%s\" from defaults database"), "WMWindowAttributes");
 
+	/* absent until the first window geometry is remembered */
+	w_global.domain.window_geometry = wDefaultsInitDomain("WMWindowGeometry", False);
+
 	XSetErrorHandler((XErrorHandler) catchXError);
 
 #ifdef USE_XSHAPE

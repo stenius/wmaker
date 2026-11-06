@@ -59,6 +59,7 @@ POTFILES  = \
 	$(top_srcdir)/src/usermenu.c \
 	$(top_srcdir)/src/wcore.c \
 	$(top_srcdir)/src/wdefaults.c \
+	$(top_srcdir)/src/wgeometry.c \
 	$(top_srcdir)/src/window.c \
 	$(top_srcdir)/src/winmenu.c \
 	$(top_srcdir)/src/winspector.c \
