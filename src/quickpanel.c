@@ -276,22 +276,34 @@ static void drawRow(WMList *lPtr, int index, Drawable d, char *text, int state, 
 	(void)text;
 	XFillRectangle(disp, d, WMColorGC(back), x, y, w, h);
 	if (e) {
-		int dw = WMWidthOfString(p->small, e->detail, strlen(e->detail));
+		/* the detail (a command line can be long) gets at most 40% of
+		 * the row; the title keeps the rest and is shortened last */
+		int max_detail = (w - 12) * 2 / 5;
+		char *detail = e->detail;
+		char *dshrunk = NULL;
+		int dw = WMWidthOfString(p->small, detail, strlen(detail));
 		int ty = y + (h - WMFontHeight(p->font)) / 2;
-		int avail = w - 12 - dw - 8;
+		int avail;
 		char *label = e->label;
 		char *shrunk = NULL;
 
+		if (dw > max_detail) {
+			dshrunk = ShrinkString(p->small, detail, max_detail);
+			detail = dshrunk;
+			dw = WMWidthOfString(p->small, detail, strlen(detail));
+		}
+		avail = w - 12 - dw - 8;
 		if (avail > 20 && WMWidthOfString(p->font, label, strlen(label)) > avail) {
 			shrunk = ShrinkString(p->font, label, avail);
 			label = shrunk;
 		}
 		WMDrawString(wscr, d, fg, p->font, x + 6, ty, label, strlen(label));
-		if (dw < w / 2)
-			WMDrawString(wscr, d, dim, p->small, x + w - dw - 6,
-				     y + (h - WMFontHeight(p->small)) / 2, e->detail, strlen(e->detail));
+		WMDrawString(wscr, d, dim, p->small, x + w - dw - 6,
+			     y + (h - WMFontHeight(p->small)) / 2, detail, strlen(detail));
 		if (shrunk)
 			wfree(shrunk);
+		if (dshrunk)
+			wfree(dshrunk);
 	}
 	WMReleaseColor(back);
 	WMReleaseColor(fg);
