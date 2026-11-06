@@ -75,6 +75,7 @@
 #include "event.h"
 #include "winmenu.h"
 #include "switchmenu.h"
+#include "expose.h"
 #include "wsmap.h"
 
 
@@ -1063,6 +1064,11 @@ static void handleClientMessage(XEvent * event)
 		if (strncmp(command, "Reconfigure", sizeof("Reconfigure")) == 0) {
 			wwarning(_("Got Reconfigure command"));
 			wDefaultsCheckDomains(NULL);
+		} else if (strncmp(command, "Expose", sizeof("Expose")) == 0) {
+			WScreen *scr = wScreenForRootWindow(event->xclient.window);
+
+			if (scr)
+				wExposeStart(scr);
 		} else {
 			wwarning(_("Got unknown command %s"), command);
 		}
@@ -1812,6 +1818,10 @@ static void dispatchWKBDCommand(int command, WScreen *scr, WWindow *wwin, XEvent
 		StartWindozeCycle(wwin, event, False, True);
 		break;
 
+	case WKBD_EXPOSE:
+		wExposeStart(scr);
+		break;
+
 	case WKBD_WORKSPACE1 ... WKBD_WORKSPACE10:
 		widx = command - WKBD_WORKSPACE1;
 		i = (scr->current_workspace / 10) * 10 + widx;
@@ -2335,10 +2345,26 @@ static inline int get_corner(WMRect rect, WMPoint p)
 static void hotCornerDelay(void *data)
 {
 	WScreen *scr = (WScreen *) data;
-	if (scr->flags.in_hot_corner && wPreferences.hot_corner_actions[scr->flags.in_hot_corner - 1])
-		ExecuteShellCommand(scr, wPreferences.hot_corner_actions[scr->flags.in_hot_corner - 1]);
+	const char *action = NULL;
+
+	if (scr->flags.in_hot_corner)
+		action = wPreferences.hot_corner_actions[scr->flags.in_hot_corner - 1];
+
 	WMDeleteTimerHandler(scr->hot_corner_timer);
 	scr->hot_corner_timer = NULL;
+
+	if (!action)
+		return;
+	if (strcmp(action, "EXPOSE") == 0) {
+		/* We are inside a timer callback. The overview runs a nested
+		 * event loop, which would run the timer handlers again while
+		 * the outer walk still holds a pointer into the list (observed
+		 * use-after-free in W_CheckTimerHandlers). Defer to the main
+		 * loop by sending ourselves the "Expose" command instead. */
+		wExposeRequest(scr);
+	} else {
+		ExecuteShellCommand(scr, action);
+	}
 }
 
 static void handleMotionNotify(XEvent *event)

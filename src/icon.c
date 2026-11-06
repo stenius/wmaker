@@ -238,6 +238,9 @@ void wIconDestroy(WIcon *icon)
 	if (icon->mini_preview)
 		XFreePixmap(dpy, icon->mini_preview);
 
+	if (icon->expose_thumb)
+		RReleaseImage(icon->expose_thumb);
+
 	unset_icon_image(icon);
 
 	wCoreDestroy(icon->core);
@@ -646,6 +649,38 @@ void set_icon_minipreview(WIcon *icon, RImage *image)
 		icon->mini_preview = tmp;
 	}
 	RReleaseImage(scaled_mini_preview);
+}
+
+/* Keep a copy of the minimize-time capture for the Expose overview.  Unlike
+ * the mini-preview this one preserves the aspect ratio; it is only scaled
+ * down when a side exceeds EXPOSE_THUMB_MAX. */
+void set_icon_expose_thumb(WIcon *icon, RImage *image)
+{
+	RImage *thumb;
+	unsigned int w = image->width, h = image->height;
+
+	if (w > EXPOSE_THUMB_MAX || h > EXPOSE_THUMB_MAX) {
+		if (w >= h) {
+			h = h * EXPOSE_THUMB_MAX / w;
+			w = EXPOSE_THUMB_MAX;
+		} else {
+			w = w * EXPOSE_THUMB_MAX / h;
+			h = EXPOSE_THUMB_MAX;
+		}
+		if (w < 1)
+			w = 1;
+		if (h < 1)
+			h = 1;
+		thumb = RSmoothScaleImage(image, w, h);
+	} else {
+		thumb = RCloneImage(image);
+	}
+
+	if (!thumb)
+		return;
+	if (icon->expose_thumb)
+		RReleaseImage(icon->expose_thumb);
+	icon->expose_thumb = thumb;
 }
 
 void wIconUpdate(WIcon *icon)

@@ -203,7 +203,7 @@ void StartWindozeCycle(WWindow *wwin, XEvent *event, Bool next, Bool class_only)
 			if (ev.xkey.keycode == leftKey || ev.xkey.keycode == rightKey)
 				break;
 
-			if (ev.xkey.keycode == XK_Return)
+			if (ev.xkey.keycode == returnKey)
 				break;
 
 			if (ev.xkey.keycode != binding.keycode)
