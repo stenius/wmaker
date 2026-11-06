@@ -486,6 +486,7 @@ extern struct WPreferences {
 
 	char hot_corners;                  /* let corners execute actions */
 	char xdg_autostart;                /* run ~/.config/autostart entries at login */
+	char remember_geometry;            /* reopen windows where their class was last */
 	int hot_corner_delay;		   /* Delay after which the hot corner is triggered */
 	int hot_corner_edge;		   /* Hot corner edge size */
 	char *hot_corner_actions[4];	   /* Action of each corner */
@@ -545,6 +546,7 @@ extern struct wmaker_global_variables {
 		/* Note: you must #include <defaults.h> if you want to use them */
 		struct WDDomain *wmaker;
 		struct WDDomain *window_attr;
+		struct WDDomain *window_geometry;	/* RememberWindowGeometry records */
 		struct WDDomain *root_menu;
 	} domain;
 
