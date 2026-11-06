@@ -104,6 +104,8 @@
 	SingleClickLaunch = NO;
 	StrictWindozeCycle = YES;
 	SwitchPanelOnlyOpen = NO;
+	SwitchPanelThumbnails = NO;
+	SwitchPanelThumbnailHeight = 120;
 	MiniPreviewSize = 128;
 	IgnoreGtkHints = NO;
 	KeepDockOnPrimaryHead = NO;
