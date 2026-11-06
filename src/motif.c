@@ -186,6 +186,13 @@ static int getMWMHints(Window window, MWMHints *mwmhints)
 	return 1;
 }
 
+Atom wMWMHintsAtom(void)
+{
+	if (!_XA_MOTIF_WM_HINTS)
+		_XA_MOTIF_WM_HINTS = XInternAtom(dpy, "_MOTIF_WM_HINTS", False);
+	return _XA_MOTIF_WM_HINTS;
+}
+
 void wMWMCheckClientHints(WWindow *wwin)
 {
 	MWMHints hints;

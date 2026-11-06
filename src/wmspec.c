@@ -29,6 +29,8 @@
 
 #include "wconfig.h"
 
+#include <stdlib.h>
+
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <stdio.h>
@@ -135,6 +137,7 @@ static Atom net_wm_handled_icons;	/* FIXME: see net_wm_icon_geometry */
 static Atom net_wm_window_opacity;
 
 static Atom net_frame_extents;
+static Atom gtk_frame_extents;
 
 /* Window Manager Protocols */
 static Atom net_wm_ping;	/* TODO */
@@ -227,6 +230,7 @@ static atomitem_t atomNames[] = {
 	{"_NET_WM_WINDOW_OPACITY", &net_wm_window_opacity},
 
 	{"_NET_FRAME_EXTENTS", &net_frame_extents},
+	{"_GTK_FRAME_EXTENTS", &gtk_frame_extents},
 
 	{"_NET_WM_PING", &net_wm_ping},
 	{"_NET_WM_SYNC_REQUEST", &net_wm_sync_request},
@@ -334,6 +338,7 @@ static void setSupportedHints(WScreen *scr)
 	atom[i++] = net_wm_window_opacity;
 
 	atom[i++] = net_frame_extents;
+	atom[i++] = gtk_frame_extents;
 	atom[i++] = net_wm_sync_request;
 
 	atom[i++] = net_wm_name;
@@ -1272,7 +1277,9 @@ static void doStateAtom(WWindow *wwin, Atom state, int set, Bool init)
 
 		if (init) {
 			wwin->flags.maximized |= (set ? MAX_VERTICAL : 0);
-		} else {
+		} else if (set != !!(wwin->flags.maximized & MAX_VERTICAL)) {
+			/* only act on an actual change: clients remove states
+			 * they never had at startup */
 			if (set)
 				wMaximizeWindow(wwin, wwin->flags.maximized | MAX_VERTICAL,
 						wGetHeadForWindow(wwin));
@@ -1286,7 +1293,7 @@ static void doStateAtom(WWindow *wwin, Atom state, int set, Bool init)
 
 		if (init) {
 			wwin->flags.maximized |= (set ? MAX_HORIZONTAL : 0);
-		} else {
+		} else if (set != !!(wwin->flags.maximized & MAX_HORIZONTAL)) {
 			if (set)
 				wMaximizeWindow(wwin, wwin->flags.maximized | MAX_HORIZONTAL,
 						wGetHeadForWindow(wwin));
@@ -1562,6 +1569,9 @@ static void clearWindowTypeFlags(WWindow *wwin)
 	wwin->client_flags.no_focusable = 0;
 	wwin->client_flags.omnipresent = 0;
 	wwin->client_flags.no_hide_others = 0;
+	wwin->client_flags.no_close_button = 0;
+	wwin->client_flags.no_miniaturize_button = 0;
+	wwin->client_flags.no_closable = 0;
 	wwin->flags.net_skip_pager = 0;
 }
 
@@ -1573,6 +1583,13 @@ static void updateWindowType(WWindow *wwin)
 	unsigned long nitems_ret, bytes_after_ret;
 	long *data = NULL;
 
+	/* drop what the previous type (or the old Motif hints) set, then let
+	 * the current Motif hints speak again before the type is applied */
+	clearWindowTypeFlags(wwin);
+#ifdef USE_MWM_HINTS
+	wMWMCheckClientHints(wwin);
+#endif
+
 	if (XGetWindowProperty(dpy, wwin->client_win, net_wm_window_type, 0, 1024,
 			       False, XA_ATOM, &type_ret, &fmt_ret, &nitems_ret,
 			       &bytes_after_ret, (unsigned char **)&data) == Success && data) {
@@ -1580,12 +1597,6 @@ static void updateWindowType(WWindow *wwin)
 		int i;
 		Atom *type = (Atom *) data;
 
-		/* drop what the previous type set, then let the Motif hints
-		 * speak again before the new type is applied */
-		clearWindowTypeFlags(wwin);
-#ifdef USE_MWM_HINTS
-		wMWMCheckClientHints(wwin);
-#endif
 		for (i = 0; i < nitems_ret; ++i) {
 			if (handleWindowType(wwin, type[i], &layer))
 				break;
@@ -1611,6 +1622,7 @@ void wNETWMCheckClientHints(WWindow *wwin, int *layer, int *workspace)
 	long *data = NULL;
 
 	wNETWMReadUserTime(wwin);
+	wNETWMReadGtkFrameExtents(wwin);
 
 	if (XGetWindowProperty(dpy, wwin->client_win, net_wm_desktop, 0, 1, False,
 			       XA_CARDINAL, &type_ret, &fmt_ret, &nitems_ret,
@@ -1826,6 +1838,38 @@ void wNETWMReadUserTime(WWindow *wwin)
 void wNETWMUpdateState(WWindow *wwin)
 {
 	updateStateHint(wwin, False, False);
+}
+
+/* _GTK_FRAME_EXTENTS: left, right, top, bottom shadow margins of a CSD window */
+void wNETWMReadGtkFrameExtents(WWindow *wwin)
+{
+	Atom type_ret;
+	int fmt_ret;
+	unsigned long nitems_ret, bytes_after_ret;
+	unsigned long *data = NULL;
+
+	wwin->flags.has_gtk_extents = 0;
+	wwin->gtk_extents.left = wwin->gtk_extents.right = 0;
+	wwin->gtk_extents.top = wwin->gtk_extents.bottom = 0;
+
+	if (XGetWindowProperty(dpy, wwin->client_win, gtk_frame_extents, 0, 4, False, XA_CARDINAL,
+			       &type_ret, &fmt_ret, &nitems_ret, &bytes_after_ret,
+			       (unsigned char **)&data) == Success && data) {
+		if (type_ret == XA_CARDINAL && fmt_ret == 32 && nitems_ret >= 4) {
+			wwin->gtk_extents.left = (int)data[0];
+			wwin->gtk_extents.right = (int)data[1];
+			wwin->gtk_extents.top = (int)data[2];
+			wwin->gtk_extents.bottom = (int)data[3];
+			wwin->flags.has_gtk_extents = 1;
+		}
+		XFree(data);
+	}
+}
+
+/* re-read _NET_WM_WINDOW_TYPE (and Motif hints) and redecorate in place */
+void wNETWMUpdateWindowType(WWindow *wwin)
+{
+	updateWindowType(wwin);
 }
 
 Bool wNETWMProcessClientMessage(XClientMessageEvent *event)
@@ -2088,6 +2132,11 @@ void wNETWMCheckClientHintChange(WWindow *wwin, XPropertyEvent *event)
 		wNETWMReadSyncCounter(wwin);
 	} else if (event->atom == net_wm_user_time || event->atom == net_wm_user_time_window) {
 		wNETWMReadUserTime(wwin);
+	} else if (event->atom == gtk_frame_extents) {
+		wNETWMReadGtkFrameExtents(wwin);
+		/* a maximized window must keep its shadow off-screen */
+		if (wwin->frame && wwin->flags.maximized)
+			wMaximizeWindow(wwin, wwin->flags.maximized, wGetHeadForWindow(wwin));
 	}
 }
 
