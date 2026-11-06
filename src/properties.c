@@ -29,6 +29,7 @@
 #include "window.h"
 #include "GNUstep.h"
 #include "properties.h"
+#include "wmspec.h"
 
 
 int PropGetNormalHints(Window window, XSizeHints * size_hints, int *pre_iccm)
@@ -86,6 +87,8 @@ void PropGetProtocols(Window window, WProtocols * prots)
 			prots->SAVE_YOURSELF = 1;
 		else if (protocols[i] == w_global.atom.gnustep.wm_miniaturize_window)
 			prots->MINIATURIZE_WINDOW = 1;
+		else if (wNETWMIsSyncRequestAtom(protocols[i]))
+			prots->SYNC_REQUEST = 1;
 	}
 	XFree(protocols);
 }

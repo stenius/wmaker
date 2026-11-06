@@ -234,6 +234,26 @@ AC_SUBST([LIBXRANDR])dnl
 ]) dnl AC_DEFUN
 
 
+# WM_XEXT_CHECK_XSYNC
+# -------------------
+#
+# Check for the X Synchronization extension (libXext), used for
+# _NET_WM_SYNC_REQUEST frame synchronisation with clients.
+# The check depends on variable 'enable_xsync' being either:
+#   yes  - detect, fail if not found
+#   no   - do not detect, disable support
+#   auto - detect, disable if not found
+#
+# When found, append appropriate stuff in LIBXSYNC, and append info to
+# the variable 'supported_xext'
+AC_DEFUN_ONCE([WM_XEXT_CHECK_XSYNC],
+[WM_LIB_CHECK([XSync], [-lXext], [XSyncQueryExtension], [$XLIBS],
+    [],
+    [supported_xext], [LIBXSYNC], [], [-])dnl
+AC_SUBST([LIBXSYNC])dnl
+]) dnl AC_DEFUN
+
+
 # WM_XEXT_CHECK_XKBFILE
 # ---------------------
 #

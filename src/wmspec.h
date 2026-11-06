@@ -77,6 +77,9 @@ int wNETWMGetCurrentDesktopFromHint(WScreen *scr);
 char *wNETWMGetIconName(Window window);
 char *wNETWMGetWindowName(Window window);
 void wNETFrameExtents(WWindow *wwin);
+Bool wNETWMIsSyncRequestAtom(Atom atom);
+Atom wNETWMSyncRequestAtom(void);
+void wNETWMReadSyncCounter(WWindow *wwin);
 void wNETCleanupFrameExtents(WWindow *wwin);
 RImage *get_window_image_from_x11(Window window);
 #endif

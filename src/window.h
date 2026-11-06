@@ -155,6 +155,7 @@ typedef struct {
     unsigned int TAKE_FOCUS:1;
     unsigned int DELETE_WINDOW:1;
     unsigned int SAVE_YOURSELF:1;
+    unsigned int SYNC_REQUEST:1;		/* _NET_WM_SYNC_REQUEST */
     /* WindowMaker specific */
     unsigned int MINIATURIZE_WINDOW:1;
 } WProtocols;
@@ -244,6 +245,16 @@ typedef struct WWindow {
 
 	/* protocols */
 	WProtocols protocols;			/* accepted WM_PROTOCOLS */
+
+	/* _NET_WM_SYNC_REQUEST frame synchronisation (see moveres.c) */
+	struct {
+		unsigned long counter;		/* client's XSync counter, None if unset */
+		unsigned long long value;	/* value the client was last asked to reach */
+		unsigned long sent_ms;		/* when the request went out (monotonic ms) */
+		unsigned int waiting:1;		/* a request is outstanding */
+		unsigned int pending:1;		/* a geometry waits for the client */
+		int px, py, pw, ph;		/* that geometry */
+	} sync;
 
 	FocusMode focus_mode;			/* type of keyboard input focus */
 

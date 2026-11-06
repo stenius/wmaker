@@ -207,8 +207,29 @@ static void mapPositionDisplay(WWindow * wwin, int x, int y, int w, int h)
 	WSetGeometryViewShownPosition(scr->gview, x, y);
 }
 
+/*
+ * showGeometry() XOR-draws guide lines on the root; a second identical call
+ * erases them. Remember what is currently drawn so that a configure applied
+ * from the frame-sync timer (outside the drag loop) can erase and redraw
+ * the guides around itself; otherwise the configure's root exposes wipe
+ * part of a guide and the loop's erase pass paints it back as residue.
+ */
+static struct {
+	Bool shown;
+	WWindow *wwin;
+	int x1, y1, x2, y2, direction;
+} guides;
+
 static void showGeometry(WWindow * wwin, int x1, int y1, int x2, int y2, int direction)
 {
+	guides.shown = !guides.shown;
+	guides.wwin = wwin;
+	guides.x1 = x1;
+	guides.y1 = y1;
+	guides.x2 = x2;
+	guides.y2 = y2;
+	guides.direction = direction;
+
 	WScreen *scr = wwin->screen_ptr;
 	Window root = scr->root_win;
 	GC gc = scr->line_gc;
@@ -1343,6 +1364,95 @@ static void do_snap(WWindow *wwin, MoveData *data, Bool opaqueMove)
 #define MOVABLE_BIT	0x01
 #define RESIZABLE_BIT	0x02
 
+
+/*
+ * Resize with _NET_WM_SYNC_REQUEST throttling. A sync-capable client gets
+ * one configure per repaint: while a request is outstanding, the latest
+ * geometry is parked and applied by syncTimerCallback() once the client
+ * catches up (or after a timeout). Pure moves are never synchronised.
+ */
+static Bool syncNeeded(WWindow *wwin, int w, int h)
+{
+	return wClientSyncCapable(wwin) && (w != wwin->client.width || h != wwin->client.height);
+}
+
+static Bool sync_debug(void)
+{
+	static int on = -1;
+
+	if (on < 0)
+		on = getenv("WMAKER_SYNC_DEBUG") != NULL;
+	return on;
+}
+
+static void syncResize(WWindow *wwin, int x, int y, int w, int h)
+{
+	if (sync_debug())
+		wwarning("syncResize %dx%d need=%d waiting=%d done=%d value=%llu", w, h,
+			 syncNeeded(wwin, w, h), wwin->sync.waiting,
+			 wwin->sync.waiting ? wClientSyncDone(wwin) : -1, wwin->sync.value);
+	if (!syncNeeded(wwin, w, h)) {
+		wWindowConfigure(wwin, x, y, w, h);
+		return;
+	}
+	if (wwin->sync.waiting) {
+		if (!wClientSyncDone(wwin)) {
+			wwin->sync.pending = 1;
+			wwin->sync.px = x;
+			wwin->sync.py = y;
+			wwin->sync.pw = w;
+			wwin->sync.ph = h;
+			return;
+		}
+		wwin->sync.waiting = 0;
+	}
+	wwin->sync.pending = 0;
+	wClientSendSyncRequest(wwin, w_global.timestamp.last_event);
+	wWindowConfigure(wwin, x, y, w, h);
+}
+
+/* the last configure of an interactive resize: never leave it parked */
+static void syncResizeFinal(WWindow *wwin, int x, int y, int w, int h)
+{
+	if (sync_debug())
+		wwarning("syncResizeFinal %dx%d need=%d waiting=%d pending=%d value=%llu", w, h,
+			 syncNeeded(wwin, w, h), wwin->sync.waiting, wwin->sync.pending, wwin->sync.value);
+	if (syncNeeded(wwin, w, h)) {
+		if (wwin->sync.waiting && !wClientSyncDone(wwin)) {
+			/* let the client finish the previous frame first, briefly */
+			unsigned long spins = 0;
+
+			while (!wClientSyncDone(wwin) && spins++ < 50)
+				usleep(2000);
+		}
+		wwin->sync.waiting = 0;
+		wClientSendSyncRequest(wwin, w_global.timestamp.last_event);
+	}
+	wwin->sync.pending = 0;
+	wWindowConfigure(wwin, x, y, w, h);
+}
+
+static void syncTimerCallback(void *data)
+{
+	WWindow *wwin = (WWindow *) data;
+
+	if (!wwin->sync.waiting || !wClientSyncDone(wwin))
+		return;
+	if (sync_debug())
+		wwarning("syncTimer: client reached %llu, pending=%d", wwin->sync.value, wwin->sync.pending);
+	wwin->sync.waiting = 0;
+	if (wwin->sync.pending) {
+		Bool redraw_guides = guides.shown && guides.wwin == wwin;
+
+		wwin->sync.pending = 0;
+		if (redraw_guides)
+			showGeometry(wwin, guides.x1, guides.y1, guides.x2, guides.y2, guides.direction);
+		syncResize(wwin, wwin->sync.px, wwin->sync.py, wwin->sync.pw, wwin->sync.ph);
+		if (redraw_guides)
+			showGeometry(wwin, guides.x1, guides.y1, guides.x2, guides.y2, guides.direction);
+	}
+}
+
 int wKeyboardMoveResizeWindow(WWindow * wwin)
 {
 	WScreen *scr = wwin->screen_ptr;
@@ -1622,7 +1732,7 @@ int wKeyboardMoveResizeWindow(WWindow * wwin)
 
 				if (opaqueMoveResize) {
 					XUngrabServer(dpy);
-					wWindowConfigure(wwin, src_x + off_x, src_y + off_y, ww, wh - vert_border);
+					syncResize(wwin, src_x + off_x, src_y + off_y, ww, wh - vert_border);
 				};
 
 		if (done) {
@@ -1670,7 +1780,7 @@ int wKeyboardMoveResizeWindow(WWindow * wwin)
 					if (wh != original_h)
 						wwin->flags.maximized &= ~(MAX_VERTICAL | MAX_LEFTHALF | MAX_RIGHTHALF | MAX_MAXIMUS | MAX_CENTRAL);
 
-					wWindowConfigure(wwin, src_x + off_x, src_y + off_y, ww, wh - vert_border);
+					syncResizeFinal(wwin, src_x + off_x, src_y + off_y, ww, wh - vert_border);
 					wWindowSynthConfigureNotify(wwin);
 				}
 				wWindowChangeWorkspace(wwin, scr->current_workspace);
@@ -2071,6 +2181,9 @@ static int getResizeDirection(WWindow * wwin, int x, int y, int dy, int flags)
 
 void wMouseResizeWindow(WWindow * wwin, XEvent * ev)
 {
+	WMHandlerID sync_timer = NULL;
+
+	guides.shown = False;
 	XEvent event;
 	WScreen *scr = wwin->screen_ptr;
 	Window root = scr->root_win;
@@ -2144,6 +2257,9 @@ void wMouseResizeWindow(WWindow * wwin, XEvent * ev)
 		else if (direction == _NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT)
 			res |= (DOWN | RIGHT);
 	}
+
+	if (opaqueResize && wClientSyncCapable(wwin))
+		sync_timer = WMAddPersistentTimerHandler(16, syncTimerCallback, wwin);
 
 	while (1) {
 		WMMaskEvent(dpy, KeyPressMask | ButtonMotionMask
@@ -2291,7 +2407,7 @@ void wMouseResizeWindow(WWindow * wwin, XEvent * ev)
 					/* Now, continue drawing */
 					XUngrabServer(dpy);
 					moveGeometryDisplayCentered(scr, fx + fw / 2, fy + fh / 2);
-					wWindowConfigure(wwin, fx, fy, fw, fh - vert_border);
+					syncResize(wwin, fx, fy, fw, fh - vert_border);
 					showGeometry(wwin, fx, fy, fx + fw, fy + fh, res);
 				};
 			}
@@ -2320,9 +2436,11 @@ void wMouseResizeWindow(WWindow * wwin, XEvent * ev)
 				if (fh != original_fh)
 					wwin->flags.maximized &= ~(MAX_VERTICAL | MAX_LEFTHALF | MAX_RIGHTHALF | MAX_MAXIMUS | MAX_CENTRAL);
 
-				wWindowConfigure(wwin, fx, fy, fw, fh - vert_border);
+				syncResizeFinal(wwin, fx, fy, fw, fh - vert_border);
 				wWindowSynthConfigureNotify(wwin);
 			}
+			if (sync_timer)
+				WMDeleteTimerHandler(sync_timer);
 			if (wwin->moveresize.active) {
 				XUngrabPointer(dpy, CurrentTime);
 				wwin->moveresize.active = 0;

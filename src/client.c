@@ -36,6 +36,11 @@
 #include "actions.h"
 #include "icon.h"
 #include "client.h"
+#include "wmspec.h"
+#include <time.h>
+#ifdef USE_XSYNC
+#include <X11/extensions/sync.h>
+#endif
 #include "colormap.h"
 #include "stacking.h"
 #include "appicon.h"
@@ -281,6 +286,83 @@ void wClientSendProtocol(WWindow * wwin, Atom protocol, Time time)
 	event.xclient.data.l[3] = 0;
 	XSendEvent(dpy, wwin->client_win, False, NoEventMask, &event);
 	XSync(dpy, False);
+}
+
+/*
+ * Frame synchronisation (_NET_WM_SYNC_REQUEST). Before resizing, ask the
+ * client to bump its counter to a new value once it has repainted at the
+ * new size; the resize loop holds further configures until it does, so the
+ * frame and the client's contents stay in step under a compositor.
+ */
+static unsigned long monotonic_ms(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (unsigned long)ts.tv_sec * 1000UL + ts.tv_nsec / 1000000UL;
+}
+
+Bool wClientSyncCapable(WWindow *wwin)
+{
+#ifdef USE_XSYNC
+	return w_global.xext.sync.supported && wwin->protocols.SYNC_REQUEST && wwin->sync.counter != None;
+#else
+	(void)wwin;
+	return False;
+#endif
+}
+
+void wClientSendSyncRequest(WWindow *wwin, Time time)
+{
+#ifdef USE_XSYNC
+	XEvent event;
+	XSyncValue value;
+
+	wwin->sync.value++;
+	XSyncIntsToValue(&value, (unsigned int)(wwin->sync.value & 0xffffffffUL),
+			 (int)(wwin->sync.value >> 32));
+
+	event.xclient.type = ClientMessage;
+	event.xclient.message_type = w_global.atom.wm.protocols;
+	event.xclient.format = 32;
+	event.xclient.display = dpy;
+	event.xclient.window = wwin->client_win;
+	event.xclient.data.l[0] = wNETWMSyncRequestAtom();
+	event.xclient.data.l[1] = time;
+	event.xclient.data.l[2] = XSyncValueLow32(value);
+	event.xclient.data.l[3] = XSyncValueHigh32(value);
+	event.xclient.data.l[4] = 0;
+	XSendEvent(dpy, wwin->client_win, False, NoEventMask, &event);
+	XFlush(dpy);
+
+	wwin->sync.waiting = 1;
+	wwin->sync.sent_ms = monotonic_ms();
+#else
+	(void)wwin;
+	(void)time;
+#endif
+}
+
+/* True once the client reached the requested value, or gave up on us */
+Bool wClientSyncDone(WWindow *wwin)
+{
+#ifdef USE_XSYNC
+	XSyncValue current;
+	unsigned long long reached;
+
+	if (!wwin->sync.waiting)
+		return True;
+	if (monotonic_ms() - wwin->sync.sent_ms > 1000UL)
+		return True;	/* client is not playing along; do not stall */
+	if (!XSyncQueryCounter(dpy, wwin->sync.counter, &current))
+		return True;
+	reached = ((unsigned long long)(unsigned int)XSyncValueHigh32(current) << 32)
+	    | (unsigned int)XSyncValueLow32(current);
+	return reached >= wwin->sync.value;
+#else
+	(void)wwin;
+	return True;
+#endif
 }
 
 void wClientKill(WWindow * wwin)
