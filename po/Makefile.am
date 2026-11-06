@@ -19,6 +19,7 @@ POTFILES  = \
 	$(top_srcdir)/src/client.c \
 	$(top_srcdir)/src/colormap.c \
 	$(top_srcdir)/src/cycling.c \
+	$(top_srcdir)/src/expose.c \
 	$(top_srcdir)/src/defaults.c \
 	$(top_srcdir)/src/dialog.c \
 	$(top_srcdir)/src/dock.c \
