@@ -341,17 +341,20 @@ static RImage *fitImage(RImage *src, int max_w, int max_h)
 	return RSmoothScaleImage(src, w, h);
 }
 
-/* fill cell->thumb/is_icon with something that fits in max_w x max_h */
-static void makeThumb(WScreen *scr, ExposeCell *cell, int max_w, int max_h)
+/*
+ * A thumbnail of wwin that fits in max_w x max_h, aspect preserved: a live
+ * capture of the frame for mapped windows, the capture taken at minimize
+ * time for minimized ones, the application icon otherwise (then *is_icon
+ * is set).  The caller releases the image.
+ */
+RImage *wExposeThumbnail(WScreen *scr, WWindow *wwin, int max_w, int max_h, Bool *is_icon)
 {
-	WWindow *wwin = wWindowFor(cell->client);
-	RImage *src = NULL;
+	RImage *src = NULL, *thumb = NULL;
 	Bool owned = False;
 
-	cell->thumb = NULL;
-	cell->is_icon = False;
-	if (!wwin)
-		return;
+	*is_icon = False;
+	if (!wwin || !wwin->frame)
+		return NULL;
 
 	if (wwin->flags.mapped && !wwin->flags.shaded) {
 		src = captureFrame(scr, wwin);
@@ -367,21 +370,31 @@ static void makeThumb(WScreen *scr, ExposeCell *cell, int max_w, int max_h)
 	}
 
 	if (src) {
-		cell->thumb = fitImage(src, max_w, max_h);
+		thumb = fitImage(src, max_w, max_h);
 		if (owned)
 			RReleaseImage(src);
 	}
 
-	if (!cell->thumb) {
+	if (!thumb) {
 		int size = EXPOSE_ICON_SIZE;
 
 		if (size > max_w)
 			size = max_w;
 		if (size > max_h)
 			size = max_h;
-		cell->thumb = iconFor(scr, wwin, size);
-		cell->is_icon = True;
+		thumb = iconFor(scr, wwin, size);
+		*is_icon = True;
 	}
+	return thumb;
+}
+
+/* fill cell->thumb/is_icon with something that fits in max_w x max_h */
+static void makeThumb(WScreen *scr, ExposeCell *cell, int max_w, int max_h)
+{
+	Bool is_icon = False;
+
+	cell->thumb = wExposeThumbnail(scr, wWindowFor(cell->client), max_w, max_h, &is_icon);
+	cell->is_icon = is_icon;
 }
 
 /* ---------------------------------------------------------------------- */

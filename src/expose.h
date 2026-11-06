@@ -48,4 +48,7 @@ void wExposeRequest(WScreen *scr);
  */
 void wExposeStoreThumb(struct WWindow *wwin, RImage *image);
 
+/* thumbnail (or icon, then *is_icon) of a window fitting max_w x max_h; caller releases */
+RImage *wExposeThumbnail(WScreen *scr, struct WWindow *wwin, int max_w, int max_h, Bool *is_icon);
+
 #endif /* WMEXPOSE_H */
