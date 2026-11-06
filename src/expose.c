@@ -112,7 +112,7 @@ static Bool wantWindow(WScreen *scr, WWindow *wwin)
 {
 	if (!wwin->frame)
 		return False;
-	if (wwin->flags.internal_window)
+	if (wwin->flags.internal_window || wwin->flags.is_dockapp)
 		return False;
 	if (WFLAGP(wwin, no_focusable) || WFLAGP(wwin, skip_switchpanel))
 		return False;
