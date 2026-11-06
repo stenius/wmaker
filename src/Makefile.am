@@ -13,6 +13,8 @@ wmaker_SOURCES = 	\
 	actions.h \
 	appicon.c \
 	appicon.h \
+	autostart.c \
+	autostart.h \
 	application.c \
 	application.h \
 	appmenu.c \
@@ -30,6 +32,8 @@ wmaker_SOURCES = 	\
 	def_pixmaps.h \
 	defaults.c \
 	defaults.h \
+	desktopentry.c \
+	desktopentry.h \
 	dialog.c \
 	dialog.h \
 	dock.c \

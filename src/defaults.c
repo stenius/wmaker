@@ -531,6 +531,8 @@ WDefaultEntry optionList[] = {
 #endif
 	{"HotCorners", "NO", NULL,
 	    &wPreferences.hot_corners, getBool, NULL, NULL, NULL},
+	{"XDGAutostart", "NO", NULL,
+	    &wPreferences.xdg_autostart, getBool, NULL, NULL, NULL},
 	{"HotCornerDelay", "250", (void *)&wPreferences.hot_corner_delay,
 	    &wPreferences.hot_corner_delay, getInt, NULL, NULL, NULL},
 	{"HotCornerEdge", "2", (void *)&wPreferences.hot_corner_edge,
