@@ -67,6 +67,7 @@ typedef struct {
 } QuickPanel;
 
 static Bool panel_open = False;
+static QuickPanel *open_panel = NULL;
 
 /* ---------------------------------------------------------------------- */
 /* candidates                                                              */
@@ -391,6 +392,12 @@ static void listDoubleAction(WMWidget *self, void *data)
 	finish((QuickPanel *) data, True);
 }
 
+static void closeAction(WMWidget *self, void *data)
+{
+	(void)self;
+	finish((QuickPanel *) data, False);
+}
+
 /* ---------------------------------------------------------------------- */
 
 void wQuickPanelShow(WScreen *scr)
@@ -406,8 +413,12 @@ void wQuickPanelShow(WScreen *scr)
 	char *cmd = NULL;
 	int wmScaleWidth, wmScaleHeight;	/* for the WMScaleX/Y macros */
 
-	if (panel_open)
+	if (panel_open) {
+		/* the hotkey pressed again while open: close */
+		if (open_panel)
+			finish(open_panel, False);
 		return;
+	}
 	panel_open = True;
 
 	WMGetScaleBaseFromSystemFont(scr->wmscreen, &wmScaleWidth, &wmScaleHeight);
@@ -426,6 +437,9 @@ void wQuickPanelShow(WScreen *scr)
 	p->win = WMCreateWindow(scr->wmscreen, "quickpanel");
 	WMResizeWidget(p->win, width, height);
 	WMSetWindowTitle(p->win, _("Switch to window or launch application"));
+	WMSetWindowCloseAction(p->win, closeAction, p);
+	/* Escape works wherever the keyboard focus is inside the panel */
+	WMCreateEventHandler(WMWidgetView(p->win), KeyPressMask, keyHandler, p);
 
 	p->text = WMCreateTextField(p->win);
 	WMResizeWidget(p->text, width - 2 * pad, field_h);
@@ -446,18 +460,28 @@ void wQuickPanelShow(WScreen *scr)
 	WMMapSubwidgets(p->win);
 	refilter(p);
 
+	/* Managed through a plain container window, as the other internal
+	 * dialogs are: that is what gets the keyboard focus to the text field.
+	 * The frame's close button could not reach us this way, so it is
+	 * dropped; the hotkey, Escape and the list double-click close the
+	 * panel instead. */
 	parent = XCreateSimpleWindow(dpy, scr->root_win, 0, 0, width, height, 0, 0, 0);
 	XSelectInput(dpy, parent, KeyPressMask | KeyReleaseMask);
 	XReparentWindow(dpy, WMWidgetXID(p->win), parent, 0, 0);
 	center = wGetPointToCenterRectInHead(scr, wGetHeadForPointerLocation(scr), width, height);
 	wwin = wManageInternalWindow(scr, parent, None, NULL, center.x, center.y, width, height);
 	wwin->client_leader = WMWidgetXID(p->win);
+	wwin->client_flags.no_close_button = 1;
+	wwin->client_flags.no_miniaturize_button = 1;
+	wWindowConfigureBorders(wwin);
 
 	WMMapWidget(p->win);
 	wWindowMap(wwin);
 	WMSetFocusToWidget(p->text);
 
+	open_panel = p;
 	WMRunModalLoop(scr->wmscreen, WMWidgetView(p->win));
+	open_panel = NULL;
 
 	/* copy what we need out of the panel before tearing it down */
 	result = p->result;
