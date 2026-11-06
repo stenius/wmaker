@@ -465,6 +465,8 @@ extern struct WPreferences {
 	char close_rootmenu_left_right_click;/* Close application menu when mouse (left or right) is clicked outside focus */
 	char strict_windoze_cycle;          /* don't close switch panel when shift is released */
 	char panel_only_open;               /* Only open the switch panel; don't switch */
+	char switch_panel_thumbnails;       /* window thumbnails instead of icons in the switch panel */
+	int switch_panel_thumb_height;      /* height of those thumbnails, in pixels */
 	int minipreview_size;               /* Size of Mini-Previews in pixels */
 
 	/* All delays here are in ms. 0 means instant auto-action. */

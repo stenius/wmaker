@@ -31,6 +31,7 @@
 #include "window.h"
 #include "defaults.h"
 #include "switchpanel.h"
+#include "expose.h"
 #include "wmspec.h"
 #include "misc.h"
 #include "xinerama.h"
@@ -69,7 +70,9 @@ struct SwitchPanel {
  * and the selected font size */
 static short int icon_size;
 static short int border_space;
-static short int icon_tile_size;
+static short int tile_w;	/* cell size; square icons, or a thumbnail box */
+static short int tile_h;
+static short int tile_pad;	/* inner margin of a thumbnail cell */
 static short int label_height;
 
 #define SCREEN_BORDER_SPACING 2*20
@@ -151,7 +154,7 @@ static void changeImage(WSwitchPanel *panel, int idecks, int selected, Bool dim,
 		back = panel->tileTmp;
 		if (panel->bg) {
 			RCopyArea(back, panel->bg,
-				  border_space + pos.x - panel->firstVisible * icon_tile_size,
+				  border_space + pos.x - panel->firstVisible * tile_w,
 				  border_space + pos.y, back->width, back->height, 0, 0);
 		} else {
 			RColor color;
@@ -189,7 +192,7 @@ static void addIconForWindow(WSwitchPanel *panel, WMWidget *parent, WWindow *wwi
 	WApplication *wapp;
 
 	WMSetFrameRelief(icon, WRFlat);
-	WMResizeWidget(icon, icon_tile_size, icon_tile_size);
+	WMResizeWidget(icon, tile_w, tile_h);
 	WMMoveWidget(icon, x, y);
 
 	/* Prefer the per-window _NET_WM_ICON so windows that share a
@@ -198,7 +201,13 @@ static void addIconForWindow(WSwitchPanel *panel, WMWidget *parent, WWindow *wwi
 	 * back to the shared application icon so a client with no
 	 * _NET_WM_ICON still picks up whatever the appicon derived from
 	 * WM_HINTS or the user icon database. */
-	if (!WFLAGP(wwin, always_user_icon) && wwin->net_icon_image)
+	if (wPreferences.switch_panel_thumbnails) {
+		Bool is_icon;
+
+		image = wExposeThumbnail(panel->scr, wwin, tile_w - 2 * tile_pad, tile_h - 2 * tile_pad, &is_icon);
+	}
+
+	if (!image && !WFLAGP(wwin, always_user_icon) && wwin->net_icon_image)
 		image = RRetainImage(wwin->net_icon_image);
 
 	wapp = wApplicationOf(wwin->main_window);
@@ -208,10 +217,11 @@ static void addIconForWindow(WSwitchPanel *panel, WMWidget *parent, WWindow *wwi
 
 	/* get_icon_image() includes the default icon image */
 	if (!image)
-		image = get_icon_image(panel->scr, wwin->wm_instance, wwin->wm_class, icon_tile_size);
+		image = get_icon_image(panel->scr, wwin->wm_instance, wwin->wm_class, tile_h);
 
 	/* We must resize the icon size (~64) to the switch panel icon size (~48) */
-	image = wIconValidateIconSize(image, icon_size);
+	if (!wPreferences.switch_panel_thumbnails)
+		image = wIconValidateIconSize(image, icon_size);
 
 	WMAddToArray(panel->images, image);
 	WMAddToArray(panel->icons, icon);
@@ -235,7 +245,7 @@ static void scrollIcons(WSwitchPanel *panel, int delta)
 	if (nfirst == panel->firstVisible)
 		return;
 
-	WMMoveWidget(panel->iconBox, -nfirst * icon_tile_size, 0);
+	WMMoveWidget(panel->iconBox, -nfirst * tile_w, 0);
 
 	panel->firstVisible = nfirst;
 
@@ -322,7 +332,7 @@ static RImage *getTile(void)
 	if (!wPreferences.swtileImage)
 		return NULL;
 
-	stile = RScaleImage(wPreferences.swtileImage, icon_tile_size, icon_tile_size);
+	stile = RScaleImage(wPreferences.swtileImage, tile_w, tile_h);
 	if (!stile)
 		return wPreferences.swtileImage;
 
@@ -347,8 +357,8 @@ static void drawTitle(WSwitchPanel *panel, int idecks, const char *title)
 			} else {
 				int w = WMWidthOfString(panel->font, ntitle, strlen(ntitle));
 
-				x = border_space + (idecks - panel->firstVisible) * icon_tile_size+
-				    icon_tile_size/ 2 - w / 2;
+				x = border_space + (idecks - panel->firstVisible) * tile_w +
+				    tile_w / 2 - w / 2;
 				if (x < border_space)
 					x = border_space;
 				else if (x + w > width - border_space)
@@ -411,7 +421,18 @@ WSwitchPanel *wInitSwitchPanel(WScreen *scr, WWindow *curwin, Bool class_only)
 	WMGetScaleBaseFromSystemFont(scr->wmscreen, &wmScaleWidth, &wmScaleHeight);
 
 	icon_size = wPreferences.switch_panel_icon_size;
-	icon_tile_size = (short int)(((float)icon_size * 1.2F) + 0.5F);
+	if (wPreferences.switch_panel_thumbnails) {
+		int th = wPreferences.switch_panel_thumb_height;
+
+		if (th < 48)
+			th = 48;
+		tile_pad = WMScaleY(6);
+		tile_h = th + 2 * tile_pad;
+		tile_w = th * 16 / 10 + 2 * tile_pad;
+	} else {
+		tile_pad = 0;
+		tile_w = tile_h = (short int)(((float)icon_size * 1.2F) + 0.5F);
+	}
 	border_space = WMScaleY(10);
 	label_height = WMScaleY(25);
 
@@ -433,12 +454,12 @@ WSwitchPanel *wInitSwitchPanel(WScreen *scr, WWindow *curwin, Bool class_only)
 		return NULL;
 	}
 
-	width = icon_tile_size* count;
+	width = tile_w * count;
 	iconsThatFitCount = count;
 
 	if (width > (int)rect.size.width) {
-		iconsThatFitCount = (rect.size.width - SCREEN_BORDER_SPACING) / icon_tile_size;
-		width = iconsThatFitCount * icon_tile_size;
+		iconsThatFitCount = (rect.size.width - SCREEN_BORDER_SPACING) / tile_w;
+		width = iconsThatFitCount * tile_w;
 	}
 
 	panel->visibleCount = iconsThatFitCount;
@@ -446,9 +467,9 @@ WSwitchPanel *wInitSwitchPanel(WScreen *scr, WWindow *curwin, Bool class_only)
 	if (!wPreferences.swtileImage)
 		return panel;
 
-	height = label_height + icon_tile_size;
+	height = label_height + tile_h;
 
-	panel->tileTmp = RCreateImage(icon_tile_size, icon_tile_size, 1);
+	panel->tileTmp = RCreateImage(tile_w, tile_h, 1);
 	panel->tile = getTile();
 	if (panel->tile && wPreferences.swbackImage[8])
 		panel->bg = createBackImage(width + 2 * border_space, height + 2 * border_space);
@@ -481,7 +502,7 @@ WSwitchPanel *wInitSwitchPanel(WScreen *scr, WWindow *curwin, Bool class_only)
 
 		panel->label = WMCreateLabel(panel->win);
 		WMResizeWidget(panel->label, width, label_height);
-		WMMoveWidget(panel->label, border_space, border_space + icon_tile_size+ 5);
+		WMMoveWidget(panel->label, border_space, border_space + tile_h + 5);
 		WMSetLabelRelief(panel->label, WRSimple);
 		WMSetWidgetBackgroundColor(panel->label, darkGray);
 		WMSetLabelFont(panel->label, panel->font);
@@ -494,17 +515,17 @@ WSwitchPanel *wInitSwitchPanel(WScreen *scr, WWindow *curwin, Bool class_only)
 	WMResizeWidget(panel->win, width + 2 * border_space, height + 2 * border_space);
 
 	viewport = WMCreateFrame(panel->win);
-	WMResizeWidget(viewport, width, icon_tile_size);
+	WMResizeWidget(viewport, width, tile_h);
 	WMMoveWidget(viewport, border_space, border_space);
 	WMSetFrameRelief(viewport, WRFlat);
 
 	panel->iconBox = WMCreateFrame(viewport);
 	WMMoveWidget(panel->iconBox, 0, 0);
-	WMResizeWidget(panel->iconBox, icon_tile_size* count, icon_tile_size);
+	WMResizeWidget(panel->iconBox, tile_w * count, tile_h);
 	WMSetFrameRelief(panel->iconBox, WRFlat);
 
 	WM_ITERATE_ARRAY(panel->windows, wwin, i) {
-		addIconForWindow(panel, panel->iconBox, wwin, i * icon_tile_size, 0);
+		addIconForWindow(panel, panel->iconBox, wwin, i * tile_w, 0);
 	}
 
 	WMMapSubwidgets(panel->win);
