@@ -42,6 +42,7 @@
 #include "appicon.h"
 #include "workspace.h"
 #include "balloon.h"
+#include "wmspec.h"
 #include "misc.h"
 
 
@@ -596,6 +597,7 @@ void wBalloonInitialize(WScreen *scr)
 
 	bal->window = XCreateWindow(dpy, scr->root_win, 1, 1, 10, 10, 1,
 				    scr->w_depth, CopyFromParent, scr->w_visual, vmask, &attribs);
+	wNETWMSetWindowType(bal->window, WNET_TYPE_TOOLTIP, "balloon");
 #if 0
 	/* select EnterNotify to so that the balloon will be unmapped
 	 * when the pointer is moved over it */

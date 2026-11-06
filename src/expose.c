@@ -67,6 +67,7 @@
 #include "xinerama.h"
 #include "misc.h"
 #include "expose.h"
+#include "wmspec.h"
 
 #define EXPOSE_MARGIN     24	/* panel edge to first cell */
 #define EXPOSE_GAP        16	/* between cells */
@@ -568,6 +569,7 @@ static ExposePanel *createPanel(WScreen *scr)
 	p->win = XCreateWindow(dpy, scr->root_win, p->x, p->y, p->width, p->height, 0,
 			       CopyFromParent, InputOutput, CopyFromParent,
 			       CWOverrideRedirect | CWSaveUnder | CWBackPixmap | CWEventMask, &attr);
+	wNETWMSetWindowType(p->win, WNET_TYPE_NOTIFICATION, "expose");
 
 	gcv.foreground = WMColorPixel(scr->white);
 	p->gc = XCreateGC(dpy, scr->root_win, GCForeground, &gcv);
