@@ -92,6 +92,12 @@ static int compareTimes(Time t1, Time t2)
 	return (diff < 60000) ? 1 : -1;
 }
 
+/* 1 if t1 is later than t2, -1 if earlier, 0 if equal; wrap-safe */
+int wCompareTimes(Time t1, Time t2)
+{
+	return compareTimes(t1, t2);
+}
+
 #ifdef USE_ANIMATIONS
 static void shade_animate(WWindow *wwin, Bool what);
 #else
@@ -162,6 +168,9 @@ void wSetFocusTo(WScreen *scr, WWindow *wwin)
 
 	wasfocused = wwin->flags.focused;
 	napp = wApplicationOf(wwin->main_window);
+
+	if (wwin->flags.demands_attention)
+		wWindowSetAttention(wwin, False);
 
 	/* remember last workspace where the app has been */
 	if (napp)

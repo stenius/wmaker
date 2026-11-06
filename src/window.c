@@ -233,6 +233,8 @@ void wWindowDestroy(WWindow *wwin)
 		XFree(wwin->cmap_windows);
 
 	XDeleteContext(dpy, wwin->client_win, w_global.context.client_win);
+	if (wwin->user_time_window != None)
+		XDeleteContext(dpy, wwin->user_time_window, w_global.context.user_time_win);
 
 	if (wwin->frame)
 		wFrameWindowDestroy(wwin->frame);
@@ -1424,8 +1426,18 @@ WWindow *wManageWindow(WScreen *scr, Window window)
 	wFrameWindowChangeState(wwin->frame, WS_UNFOCUSED);
 
 	if (!wwin->flags.miniaturized && workspace == scr->current_workspace && !wwin->flags.hidden) {
-		if (((transientOwner && transientOwner->flags.focused)
-		     || wPreferences.auto_focus) && !WFLAGP(wwin, no_focusable)) {
+		Bool owner_focused = (transientOwner && transientOwner->flags.focused);
+		Bool denied = False;
+
+		/* focus-stealing prevention: a window whose user time is older
+		 * than the last thing the user did gets attention, not focus */
+		if (!owner_focused && wPreferences.auto_focus && !wWindowMayTakeFocus(wwin))
+			denied = True;
+
+		if (denied && !WFLAGP(wwin, no_focusable))
+			wWindowSetAttention(wwin, True);
+
+		if ((owner_focused || (wPreferences.auto_focus && !denied)) && !WFLAGP(wwin, no_focusable)) {
 
 			/* only auto_focus if on same screen as mouse
 			 * (and same head for xinerama mode)
@@ -2809,6 +2821,44 @@ void wWindowResetMouseGrabs(WWindow * wwin)
 			    True, ButtonPressMask | ButtonReleaseMask, GrabModeSync, GrabModeAsync, None, None);
 	}
 	XFlush(dpy);
+}
+
+/*
+ * Decide whether a newly mapped window may take the focus, from its
+ * _NET_WM_USER_TIME against the last key or button event we saw.
+ */
+Bool wWindowMayTakeFocus(WWindow *wwin)
+{
+	WWindow *focused = wwin->screen_ptr->focused_window;
+
+	if (!wwin->flags.has_user_time)
+		return True;	/* old-style client: keep the classic behaviour */
+	if (wwin->user_time == 0)
+		return False;	/* the client asked not to be focused on map */
+	if (focused && focused->flags.focused && focused->main_window == wwin->main_window)
+		return True;	/* same application as the active window */
+	if (w_global.timestamp.last_user_input == 0)
+		return True;
+	return wCompareTimes(wwin->user_time, w_global.timestamp.last_user_input) >= 0;
+}
+
+/*
+ * _NET_WM_STATE_DEMANDS_ATTENTION: mark the window (titlebar accent,
+ * miniwindow highlight, bouncing appicon) until it gets the focus.
+ */
+void wWindowSetAttention(WWindow *wwin, Bool on)
+{
+	if (wwin->flags.demands_attention == on)
+		return;
+	wwin->flags.demands_attention = on;
+	if (wwin->frame) {
+		wwin->frame->flags.attention = on;
+		wFrameWindowPaint(wwin->frame);
+	}
+	if (wwin->icon)
+		wIconSetHighlited(wwin->icon, on);
+	wAppBounceWhileUrgent(wApplicationOf(wwin->main_window));
+	wNETWMUpdateState(wwin);
 }
 
 void wWindowUpdateGNUstepAttr(WWindow * wwin, GNUstepWMAttributes * attr)

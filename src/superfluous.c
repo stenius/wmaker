@@ -347,7 +347,7 @@ static int appIsUrgent(WApplication *wapp)
 
 	while (wlist) {
 		if (wlist->main_window == wapp->main_window) {
-			if (wlist->flags.urgent)
+			if (wlist->flags.urgent || wlist->flags.demands_attention)
 				return 1;
 		}
 		wlist = wlist->prev;
