@@ -110,6 +110,7 @@ static struct keyOption {
 	{ "GroupNextKey",   N_("Focus next group window") },
 	{ "GroupPrevKey",   N_("Focus previous group window") },
 	{ "ExposeKey",      N_("Show overview of all windows (expose)") },
+	{ "QuickSwitchKey", N_("Find a window or launch an application by name") },
 
 	/* Vim-like Window Marking */
 	{ "MarkSetKey",   N_("Mark window: set mark") },
