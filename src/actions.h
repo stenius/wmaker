@@ -40,6 +40,7 @@
 #define SAVE_GEOMETRY_ALL      SAVE_GEOMETRY_X | SAVE_GEOMETRY_Y | SAVE_GEOMETRY_WIDTH | SAVE_GEOMETRY_HEIGHT
 
 void wSetFocusTo(WScreen *scr, WWindow *wwin);
+int wCompareTimes(Time t1, Time t2);
 void wSetFocusToDirection(WScreen *scr, int direction);
 
 int wMouseMoveWindow(WWindow *wwin, XEvent *ev);

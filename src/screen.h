@@ -143,6 +143,7 @@ typedef struct _WScreen {
 
     WMColor *black;
     WMColor *white;
+    WMColor *attention_color;	       /* demands-attention marker, lazily made */
     WMColor *gray;
     WMColor *darkGray;
 

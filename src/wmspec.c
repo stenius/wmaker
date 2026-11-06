@@ -110,6 +110,9 @@ static Atom net_wm_state_skip_pager;
 static Atom net_wm_state_hidden;
 static Atom net_wm_state_fullscreen;
 static Atom net_wm_state_above;
+static Atom net_wm_state_demands_attention;
+static Atom net_wm_user_time;
+static Atom net_wm_user_time_window;
 static Atom net_wm_state_below;
 static Atom net_wm_state_focused;
 static Atom net_wm_allowed_actions;
@@ -199,6 +202,9 @@ static atomitem_t atomNames[] = {
 	{"_NET_WM_STATE_HIDDEN", &net_wm_state_hidden},
 	{"_NET_WM_STATE_FULLSCREEN", &net_wm_state_fullscreen},
 	{"_NET_WM_STATE_ABOVE", &net_wm_state_above},
+	{"_NET_WM_STATE_DEMANDS_ATTENTION", &net_wm_state_demands_attention},
+	{"_NET_WM_USER_TIME", &net_wm_user_time},
+	{"_NET_WM_USER_TIME_WINDOW", &net_wm_user_time_window},
 	{"_NET_WM_STATE_BELOW", &net_wm_state_below},
 	{"_NET_WM_STATE_FOCUSED", &net_wm_state_focused},
 	{"_NET_WM_ALLOWED_ACTIONS", &net_wm_allowed_actions},
@@ -300,6 +306,9 @@ static void setSupportedHints(WScreen *scr)
 	atom[i++] = net_wm_state_maximized_vert;
 	atom[i++] = net_wm_state_skip_taskbar;
 	atom[i++] = net_wm_state_skip_pager;
+	atom[i++] = net_wm_state_demands_attention;
+	atom[i++] = net_wm_user_time;
+	atom[i++] = net_wm_user_time_window;
 	atom[i++] = net_wm_state_hidden;
 	atom[i++] = net_wm_state_fullscreen;
 	atom[i++] = net_wm_state_above;
@@ -1082,6 +1091,8 @@ static void updateStateHint(WWindow *wwin, Bool changedWorkspace, Bool del)
 			state[i++] = net_wm_state_above;
 		if (wwin->flags.fullscreen)
 			state[i++] = net_wm_state_fullscreen;
+		if (wwin->flags.demands_attention)
+			state[i++] = net_wm_state_demands_attention;
 		if (wwin->flags.focused)
 			state[i++] = net_wm_state_focused; 
 
@@ -1247,6 +1258,14 @@ static void doStateAtom(WWindow *wwin, Atom state, int set, Bool init)
 			set = !wwin->flags.net_skip_pager;
 
 		wwin->flags.net_skip_pager = set;
+	} else if (state == net_wm_state_demands_attention) {
+		if (set == _NET_WM_STATE_TOGGLE)
+			set = !wwin->flags.demands_attention;
+
+		if (init)
+			wwin->flags.demands_attention = set;
+		else
+			wWindowSetAttention(wwin, set);
 	} else if (state == net_wm_state_maximized_vert) {
 		if (set == _NET_WM_STATE_TOGGLE)
 			set = !(wwin->flags.maximized & MAX_VERTICAL);
@@ -1591,6 +1610,8 @@ void wNETWMCheckClientHints(WWindow *wwin, int *layer, int *workspace)
 	unsigned long nitems_ret, bytes_after_ret;
 	long *data = NULL;
 
+	wNETWMReadUserTime(wwin);
+
 	if (XGetWindowProperty(dpy, wwin->client_win, net_wm_desktop, 0, 1, False,
 			       XA_CARDINAL, &type_ret, &fmt_ret, &nitems_ret,
 			       &bytes_after_ret, (unsigned char **)&data) == Success && data) {
@@ -1744,6 +1765,69 @@ static void handleDesktopNames(WScreen *scr)
 	}
 }
 
+/*
+ * Focus-stealing prevention for _NET_ACTIVE_WINDOW: a pager (source 2)
+ * always wins; an application (source 1) only if its timestamp is not
+ * older than the user's last key or button, or if it already owns the
+ * active window. Legacy requests (source 0) keep the classic behaviour.
+ */
+static Bool activationAllowed(WWindow *wwin, long source, Time timestamp)
+{
+	WWindow *focused = wwin->screen_ptr->focused_window;
+
+	if (source != 1)
+		return True;
+	if (focused && focused->flags.focused && focused->main_window == wwin->main_window)
+		return True;
+	if (timestamp == 0 || w_global.timestamp.last_user_input == 0)
+		return True;
+	return wCompareTimes(timestamp, w_global.timestamp.last_user_input) >= 0;
+}
+
+/* _NET_WM_USER_TIME, possibly living on _NET_WM_USER_TIME_WINDOW */
+void wNETWMReadUserTime(WWindow *wwin)
+{
+	Atom type_ret;
+	int fmt_ret;
+	unsigned long nitems_ret, bytes_after_ret;
+	unsigned long *data = NULL;
+	Window src = wwin->client_win;
+
+	if (XGetWindowProperty(dpy, wwin->client_win, net_wm_user_time_window, 0, 1, False, XA_WINDOW,
+			       &type_ret, &fmt_ret, &nitems_ret, &bytes_after_ret,
+			       (unsigned char **)&data) == Success && data) {
+		if (type_ret == XA_WINDOW && nitems_ret >= 1 && data[0] != None) {
+			Window utw = (Window) data[0];
+
+			if (utw != wwin->user_time_window) {
+				if (wwin->user_time_window != None)
+					XDeleteContext(dpy, wwin->user_time_window, w_global.context.user_time_win);
+				wwin->user_time_window = utw;
+				XSaveContext(dpy, utw, w_global.context.user_time_win, (XPointer) wwin);
+				XSelectInput(dpy, utw, PropertyChangeMask);
+			}
+			src = utw;
+		}
+		XFree(data);
+		data = NULL;
+	}
+
+	if (XGetWindowProperty(dpy, src, net_wm_user_time, 0, 1, False, XA_CARDINAL,
+			       &type_ret, &fmt_ret, &nitems_ret, &bytes_after_ret,
+			       (unsigned char **)&data) == Success && data) {
+		if (type_ret == XA_CARDINAL && nitems_ret >= 1) {
+			wwin->user_time = (Time) data[0];
+			wwin->flags.has_user_time = 1;
+		}
+		XFree(data);
+	}
+}
+
+void wNETWMUpdateState(WWindow *wwin)
+{
+	updateStateHint(wwin, False, False);
+}
+
 Bool wNETWMProcessClientMessage(XClientMessageEvent *event)
 {
 	WScreen *scr;
@@ -1806,6 +1890,11 @@ Bool wNETWMProcessClientMessage(XClientMessageEvent *event)
 		 * - giving the client the focus does not cause a change in
 		 *   the active workspace (XXX: or the active head if Xinerama)
 		 */
+		if (!activationAllowed(wwin, event->data.l[0], (Time) event->data.l[1])) {
+			/* stale request from an application: flag it instead */
+			wWindowSetAttention(wwin, True);
+			return True;
+		}
 		if (wwin->frame->workspace == wwin->screen_ptr->current_workspace /* No workspace change */
 		    || event->data.l[0] == 2 /* Requested by pager */
 		    || WFLAGP(wwin, focus_across_wksp) /* Explicitly allowed */) {
@@ -1997,6 +2086,8 @@ void wNETWMCheckClientHintChange(WWindow *wwin, XPropertyEvent *event)
 		updateWindowOpacity(wwin);
 	} else if (event->atom == net_wm_sync_request_counter) {
 		wNETWMReadSyncCounter(wwin);
+	} else if (event->atom == net_wm_user_time || event->atom == net_wm_user_time_window) {
+		wNETWMReadUserTime(wwin);
 	}
 }
 

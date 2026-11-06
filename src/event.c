@@ -547,10 +547,12 @@ static void saveTimestamp(XEvent * event)
 	case ButtonRelease:
 	case ButtonPress:
 		w_global.timestamp.last_event = event->xbutton.time;
+		w_global.timestamp.last_user_input = event->xbutton.time;
 		break;
 	case KeyPress:
 	case KeyRelease:
 		w_global.timestamp.last_event = event->xkey.time;
+		w_global.timestamp.last_user_input = event->xkey.time;
 		break;
 	case MotionNotify:
 		w_global.timestamp.last_event = event->xmotion.time;
@@ -1020,6 +1022,13 @@ static void handlePropertyNotify(XEvent * event)
 			return;
 		}
 		wClientCheckProperty(wwin, &event->xproperty);
+	} else {
+		/* _NET_WM_USER_TIME_WINDOW of a managed window? */
+		XPointer data = NULL;
+
+		if (XFindContext(dpy, event->xproperty.window, w_global.context.user_time_win, &data) == XCSUCCESS
+		    && data)
+			wNETWMCheckClientHintChange((WWindow *) data, &event->xproperty);
 	}
 	wapp = wApplicationOf(event->xproperty.window);
 	if (wapp) {

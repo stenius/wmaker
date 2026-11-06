@@ -80,6 +80,8 @@ void wNETFrameExtents(WWindow *wwin);
 Bool wNETWMIsSyncRequestAtom(Atom atom);
 Atom wNETWMSyncRequestAtom(void);
 void wNETWMReadSyncCounter(WWindow *wwin);
+void wNETWMReadUserTime(WWindow *wwin);
+void wNETWMUpdateState(WWindow *wwin);
 void wNETCleanupFrameExtents(WWindow *wwin);
 RImage *get_window_image_from_x11(Window window);
 #endif
