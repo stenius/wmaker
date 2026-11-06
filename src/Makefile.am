@@ -104,6 +104,8 @@ wmaker_SOURCES = 	\
 	wcore.h \
 	wdefaults.c \
 	wdefaults.h \
+	wgeometry.c \
+	wgeometry.h \
 	window.c \
 	window.h \
 	winmenu.c \

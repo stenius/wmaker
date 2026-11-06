@@ -193,6 +193,7 @@
 	GroupPrevKey = None;
 	ExposeKey = None;
 	XDGAutostart = NO;
+	RememberWindowGeometry = NO;
 	NextWorkspaceKey = "Mod1+Control+Right";
 	PrevWorkspaceKey = "Mod1+Control+Left";
 	LastWorkspaceKey = None;
