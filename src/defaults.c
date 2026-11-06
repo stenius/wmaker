@@ -733,6 +733,8 @@ WDefaultEntry optionList[] = {
 	    NULL, getKeybind, setKeyGrab, NULL, NULL},
 	{"GroupPrevKey", "None", (void *)WKBD_GROUPPREV,
 	    NULL, getKeybind, setKeyGrab, NULL, NULL},
+	{"ExposeKey", "None", (void *)WKBD_EXPOSE,
+	    NULL, getKeybind, setKeyGrab, NULL, NULL},
 	{"NextWorkspaceKey", "Mod1+Control+Right", (void *)WKBD_NEXTWORKSPACE,
 	    NULL, getKeybind, setKeyGrab, NULL, NULL},
 	{"PrevWorkspaceKey", "Mod1+Control+Left", (void *)WKBD_PREVWORKSPACE,

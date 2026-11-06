@@ -1546,6 +1546,7 @@ void wIconifyWindow(WWindow *wwin)
 
 				if (mini_preview) {
 					set_icon_minipreview(wwin->icon, mini_preview);
+					set_icon_expose_thumb(wwin->icon, mini_preview);
 					RReleaseImage(mini_preview);
 				} else {
 					const char *title;

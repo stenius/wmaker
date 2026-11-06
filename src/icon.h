@@ -31,6 +31,9 @@
 /* This is the border, in pixel, drawn around a Mini-Preview */
 #define MINIPREVIEW_BORDER 1
 
+/* Longest side kept for the aspect-correct capture used by the Expose overview */
+#define EXPOSE_THUMB_MAX 640
+
 typedef struct WIcon {
 	WCoreWindow 	*core;
 	WWindow 	*owner;		/* owner window */
@@ -51,6 +54,7 @@ typedef struct WIcon {
 
 	Pixmap 		pixmap;
 	Pixmap		mini_preview;
+	RImage		*expose_thumb;	/* capture at minimize time, aspect kept */
 
 	WMHandlerID	handlerID;	/* timer handler ID for cycling select
 					 * color */
@@ -78,6 +82,7 @@ char *get_name_for_instance_class(const char *wm_instance, const char *wm_class)
 void wIconSetHighlited(WIcon *icon, Bool flag);
 void set_icon_image_from_image(WIcon *icon, RImage *image);
 void set_icon_minipreview(WIcon *icon, RImage *image);
+void set_icon_expose_thumb(WIcon *icon, RImage *image);
 
 void remove_cache_icon(char *filename);
 #endif /* WMICON_H_ */
