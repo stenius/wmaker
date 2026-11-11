@@ -52,6 +52,7 @@
 #include "event.h"
 #ifdef USE_DOCK_XDND
 #include "xdnd.h"
+#include "quickactions.h"
 #endif
 
 /*
@@ -630,10 +631,14 @@ static void openApplicationMenu(WApplication * wapp, int x, int y)
 
 	menu = scr->icon_menu;
 
+	/* the application's own actions, refreshed on every open */
+	wQuickActionsRemove(menu, scr->icon_menu_nactions);
+	scr->icon_menu_nactions = wapp->app_icon ? wQuickActionsInsert(menu, wapp->app_icon) : 0;
+
 	if (wapp->flags.hidden)
-		menu->entries[1]->text = _("Unhide");
+		menu->entries[scr->icon_menu_nactions + 1]->text = _("Unhide");
 	else
-		menu->entries[1]->text = _("Hide");
+		menu->entries[scr->icon_menu_nactions + 1]->text = _("Hide");
 
 	menu->flags.realized = 0;
 	wMenuRealize(menu);
@@ -645,8 +650,8 @@ static void openApplicationMenu(WApplication * wapp, int x, int y)
 	if (x < 0)
 		x = 0;
 
-	/* set client data */
-	for (i = 0; i < menu->entry_no; i++)
+	/* set client data (the action entries keep their own) */
+	for (i = scr->icon_menu_nactions; i < menu->entry_no; i++)
 		menu->entries[i]->clientdata = wapp;
 
 	wMenuMapAt(menu, x, y, False);

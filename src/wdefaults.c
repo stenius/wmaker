@@ -80,6 +80,7 @@ static WMPropList *ASharedAppIcon;	/* app */
 static WMPropList *ANoLanguageButton;
 #endif
 static WMPropList *AStartWorkspace;
+static WMPropList *AQuickActions;
 static WMPropList *AIgnoreDecorationChanges;
 static WMPropList *AIcon;
 static WMPropList *AnyWindow;
@@ -120,6 +121,7 @@ static void init_wdefaults(void)
 #endif
 
 	AStartWorkspace = WMCreatePLString("StartWorkspace");
+	AQuickActions = WMCreatePLString("QuickActions");
 	AIgnoreDecorationChanges = WMCreatePLString("IgnoreDecorationChanges");
 
 	AnyWindow = WMCreatePLString("*");
@@ -511,6 +513,24 @@ int wDefaultGetStartWorkspace(WScreen *scr, const char *instance, const char *cl
 	w = wGetWorkspaceNumber(scr, tmp);
 
 	return w;
+}
+
+/* The QuickActions array for an application: ( ("Label", "command"), ... ),
+ * or NULL.  The result belongs to the defaults dictionary. */
+WMPropList *wDefaultGetQuickActions(const char *instance, const char *class)
+{
+	WMPropList *value;
+
+	if (!ANoTitlebar)
+		init_wdefaults();
+
+	if (!w_global.domain.window_attr->dictionary)
+		return NULL;
+
+	value = get_generic_value(instance, class, AQuickActions, False);
+	if (!value || !WMIsPLArray(value))
+		return NULL;
+	return value;
 }
 
 /* Get the name of the Icon File. If default_icon is True, then, default value included */

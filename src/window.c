@@ -226,6 +226,8 @@ void wWindowDestroy(WWindow *wwin)
 
 	if (wwin->wm_class)
 		XFree(wwin->wm_class);
+	if (wwin->desktop_id)
+		wfree(wwin->desktop_id);
 
 	if (wwin->wm_gnustep_attr)
 		wfree(wwin->wm_gnustep_attr);

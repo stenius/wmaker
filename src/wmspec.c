@@ -115,6 +115,8 @@ static Atom net_wm_state_above;
 static Atom net_wm_state_demands_attention;
 static Atom net_wm_user_time;
 static Atom net_wm_user_time_window;
+static Atom kde_net_wm_desktop_file;
+static Atom gtk_application_id;
 static Atom net_wm_state_below;
 static Atom net_wm_state_focused;
 static Atom net_wm_allowed_actions;
@@ -208,6 +210,8 @@ static atomitem_t atomNames[] = {
 	{"_NET_WM_STATE_DEMANDS_ATTENTION", &net_wm_state_demands_attention},
 	{"_NET_WM_USER_TIME", &net_wm_user_time},
 	{"_NET_WM_USER_TIME_WINDOW", &net_wm_user_time_window},
+	{"_KDE_NET_WM_DESKTOP_FILE", &kde_net_wm_desktop_file},
+	{"_GTK_APPLICATION_ID", &gtk_application_id},
 	{"_NET_WM_STATE_BELOW", &net_wm_state_below},
 	{"_NET_WM_STATE_FOCUSED", &net_wm_state_focused},
 	{"_NET_WM_ALLOWED_ACTIONS", &net_wm_allowed_actions},
@@ -1623,6 +1627,7 @@ void wNETWMCheckClientHints(WWindow *wwin, int *layer, int *workspace)
 
 	wNETWMReadUserTime(wwin);
 	wNETWMReadGtkFrameExtents(wwin);
+	wNETWMReadDesktopId(wwin);
 
 	if (XGetWindowProperty(dpy, wwin->client_win, net_wm_desktop, 0, 1, False,
 			       XA_CARDINAL, &type_ret, &fmt_ret, &nitems_ret,
@@ -1833,6 +1838,39 @@ void wNETWMReadUserTime(WWindow *wwin)
 		}
 		XFree(data);
 	}
+}
+
+/* an 8-bit string property (STRING or UTF8_STRING), or NULL */
+static char *readStringProperty(Window win, Atom prop)
+{
+	Atom type_ret;
+	int fmt_ret;
+	unsigned long nitems_ret, bytes_after_ret;
+	unsigned char *data = NULL;
+	char *result = NULL;
+
+	if (XGetWindowProperty(dpy, win, prop, 0, 256, False, AnyPropertyType,
+			       &type_ret, &fmt_ret, &nitems_ret, &bytes_after_ret, &data) == Success && data) {
+		if (fmt_ret == 8 && nitems_ret > 0)
+			result = wstrndup((char *)data, nitems_ret);
+		XFree(data);
+	}
+	return result;
+}
+
+/* _KDE_NET_WM_DESKTOP_FILE or _GTK_APPLICATION_ID: the application's desktop id */
+void wNETWMReadDesktopId(WWindow *wwin)
+{
+	char *id;
+
+	id = readStringProperty(wwin->client_win, kde_net_wm_desktop_file);
+	if (!id)
+		id = readStringProperty(wwin->client_win, gtk_application_id);
+	if (!id)
+		return;
+	if (wwin->desktop_id)
+		wfree(wwin->desktop_id);
+	wwin->desktop_id = id;
 }
 
 void wNETWMUpdateState(WWindow *wwin)

@@ -32,6 +32,16 @@
 
 #define DESKTOP_SUFFIX ".desktop"
 
+static void freeAction(void *data)
+{
+	WDesktopAction *a = data;
+
+	wfree(a->id);
+	wfree(a->name);
+	wfree(a->exec);
+	wfree(a);
+}
+
 static void freeEntry(void *data)
 {
 	WDesktopEntry *e = data;
@@ -43,6 +53,9 @@ static void freeEntry(void *data)
 	wfree(e->try_exec);
 	wfree(e->only_show_in);
 	wfree(e->not_show_in);
+	wfree(e->startup_wm_class);
+	if (e->actions)
+		WMFreeArray(e->actions);
 	wfree(e);
 }
 
@@ -86,12 +99,48 @@ static char *stripFieldCodes(const char *exec)
 	return out;
 }
 
+/* the action with this id, creating it (in Actions= order) when listed */
+static WDesktopAction *actionFor(WDesktopEntry *e, const char *id, Bool create)
+{
+	WDesktopAction *a;
+	int i;
+
+	if (e->actions) {
+		WM_ITERATE_ARRAY(e->actions, a, i) {
+			if (strcmp(a->id, id) == 0)
+				return a;
+		}
+	}
+	if (!create)
+		return NULL;
+	if (!e->actions)
+		e->actions = WMCreateArrayWithDestructor(4, freeAction);
+	a = wmalloc(sizeof(WDesktopAction));
+	a->id = wstrdup(id);
+	WMAddToArray(e->actions, a);
+	return a;
+}
+
+/* Actions=a;b;c; declares the actions and their order */
+static void declareActions(WDesktopEntry *e, const char *list)
+{
+	char *copy = wstrdup(list), *p, *save = NULL;
+
+	for (p = strtok_r(copy, ";", &save); p; p = strtok_r(NULL, ";", &save)) {
+		rtrim(p);
+		if (p[0])
+			actionFor(e, p, True);
+	}
+	wfree(copy);
+}
+
 static WDesktopEntry *parseFile(const char *path, const char *id)
 {
 	FILE *f = fopen(path, "r");
 	WDesktopEntry *e;
+	WDesktopAction *action = NULL;
 	char line[4096];
-	Bool in_group = False, is_application = False;
+	Bool in_main = False, is_application = False;
 
 	if (!f)
 		return NULL;
@@ -105,10 +154,20 @@ static WDesktopEntry *parseFile(const char *path, const char *id)
 
 		rtrim(line);
 		if (line[0] == '[') {
-			in_group = (strcmp(line, "[Desktop Entry]") == 0);
+			static const char prefix[] = "[Desktop Action ";
+			size_t len = strlen(line);
+
+			in_main = (strcmp(line, "[Desktop Entry]") == 0);
+			action = NULL;
+			if (strncmp(line, prefix, sizeof(prefix) - 1) == 0 && line[len - 1] == ']') {
+				line[len - 1] = '\0';
+				/* only actions announced in Actions= count; the main
+				 * group precedes the action groups in practice */
+				action = actionFor(e, line + sizeof(prefix) - 1, False);
+			}
 			continue;
 		}
-		if (!in_group || line[0] == '#' || line[0] == '\0')
+		if ((!in_main && !action) || line[0] == '#' || line[0] == '\0')
 			continue;
 
 		eq = strchr(line, '=');
@@ -120,6 +179,17 @@ static WDesktopEntry *parseFile(const char *path, const char *id)
 		rtrim(key);
 		while (*value == ' ' || *value == '\t')
 			value++;
+
+		if (action) {
+			if (strcmp(key, "Name") == 0) {
+				if (!action->name)
+					action->name = wstrdup(value);
+			} else if (strcmp(key, "Exec") == 0) {
+				if (!action->exec)
+					action->exec = stripFieldCodes(value);
+			}
+			continue;
+		}
 
 		if (strcmp(key, "Type") == 0) {
 			is_application = (strcmp(value, "Application") == 0);
@@ -146,6 +216,11 @@ static WDesktopEntry *parseFile(const char *path, const char *id)
 		} else if (strcmp(key, "X-GNOME-Autostart-enabled") == 0) {
 			if (!isTrue(value))
 				e->autostart_disabled = 1;
+		} else if (strcmp(key, "StartupWMClass") == 0) {
+			if (!e->startup_wm_class && value[0])
+				e->startup_wm_class = wstrdup(value);
+		} else if (strcmp(key, "Actions") == 0) {
+			declareActions(e, value);
 		}
 	}
 	fclose(f);
@@ -156,6 +231,24 @@ static WDesktopEntry *parseFile(const char *path, const char *id)
 	}
 	if (!e->name)
 		e->name = wstrdup(id);
+
+	/* drop declared actions that have no usable group */
+	if (e->actions) {
+		int i;
+
+		for (i = WMGetArrayItemCount(e->actions) - 1; i >= 0; i--) {
+			WDesktopAction *a = WMGetFromArray(e->actions, i);
+
+			if (!a->exec || a->exec[0] == '\0')
+				WMDeleteFromArray(e->actions, i);
+			else if (!a->name)
+				a->name = wstrdup(a->id);
+		}
+		if (WMGetArrayItemCount(e->actions) == 0) {
+			WMFreeArray(e->actions);
+			e->actions = NULL;
+		}
+	}
 	return e;
 }
 
@@ -224,6 +317,187 @@ void wDesktopEntriesFree(WMArray *entries)
 {
 	if (entries)
 		WMFreeArray(entries);
+}
+
+/* ---------------------------------------------------------------------- */
+/* the installed applications                                             */
+
+static const char *const *applicationDirs(int *count)
+{
+	static char *dirs[32];
+	static int ndirs = -1;
+
+	if (ndirs < 0) {
+		const char *home = getenv("HOME");
+		const char *data_home = getenv("XDG_DATA_HOME");
+		const char *data_dirs = getenv("XDG_DATA_DIRS");
+		char *list, *p, *save = NULL;
+
+		ndirs = 0;
+		if (data_home && data_home[0])
+			dirs[ndirs++] = wstrconcat(data_home, "/applications");
+		else if (home && home[0])
+			dirs[ndirs++] = wstrconcat(home, "/.local/share/applications");
+		list = wstrdup((data_dirs && data_dirs[0]) ? data_dirs : "/usr/local/share:/usr/share");
+		for (p = strtok_r(list, ":", &save); p && ndirs < 31; p = strtok_r(NULL, ":", &save))
+			if (p[0])
+				dirs[ndirs++] = wstrconcat(p, "/applications");
+		wfree(list);
+	}
+	*count = ndirs;
+	return (const char *const *)dirs;
+}
+
+/* a cheap signature of the directories: the sum of their mtimes */
+static long applicationDirsStamp(const char *const *dirs, int ndirs)
+{
+	long stamp = 0;
+	int d;
+
+	for (d = 0; d < ndirs; d++) {
+		struct stat st;
+
+		if (stat(dirs[d], &st) == 0)
+			stamp += (long)st.st_mtime + d;
+	}
+	return stamp;
+}
+
+WMArray *wDesktopEntriesApplications(void)
+{
+	static WMArray *apps = NULL;
+	static long stamp = -1;
+	const char *const *dirs;
+	int ndirs = 0;
+	long now;
+
+	dirs = applicationDirs(&ndirs);
+	now = applicationDirsStamp(dirs, ndirs);
+	if (!apps || now != stamp) {
+		if (apps)
+			WMFreeArray(apps);
+		apps = wDesktopEntriesLoad(dirs, ndirs);
+		stamp = now;
+	}
+	return apps;
+}
+
+/* basename of the first word of a command line, in a static buffer;
+ * an "env VAR=value ..." prefix and surrounding quotes are skipped */
+static const char *programOf(const char *command)
+{
+	static char buf[256];
+	const char *p = command, *end, *q;
+	Bool after_env = False;
+	size_t len;
+
+	if (!command)
+		return NULL;
+	for (;;) {
+		while (*p == ' ' || *p == '\t')
+			p++;
+		if (*p == '\0')
+			return NULL;
+		end = p;
+		while (*end && *end != ' ' && *end != '\t')
+			end++;
+		if (!after_env && end - p == 3 && strncmp(p, "env", 3) == 0) {
+			after_env = True;
+			p = end;
+			continue;
+		}
+		if (after_env && memchr(p, '=', end - p)) {
+			p = end;
+			continue;
+		}
+		break;
+	}
+	if (*p == '"' || *p == '\'') {
+		p++;
+		if (end > p && (end[-1] == '"' || end[-1] == '\''))
+			end--;
+	}
+	for (q = end; q > p; q--) {
+		if (q[-1] == '/') {
+			p = q;
+			break;
+		}
+	}
+	len = end - p;
+	if (len == 0 || len >= sizeof(buf))
+		return NULL;
+	memcpy(buf, p, len);
+	buf[len] = '\0';
+	return buf;
+}
+
+/* "org.kde.konsole" ends in ".konsole"; plain ids compare whole */
+static Bool idMatchesName(const char *id, const char *name)
+{
+	size_t il = strlen(id), nl = strlen(name);
+
+	if (strcasecmp(id, name) == 0)
+		return True;
+	return il > nl + 1 && id[il - nl - 1] == '.' && strcasecmp(id + il - nl, name) == 0;
+}
+
+const WDesktopEntry *wDesktopEntryForApp(const char *desktop_id, const char *wm_instance,
+					 const char *wm_class, const char *command)
+{
+	WMArray *apps = wDesktopEntriesApplications();
+	WDesktopEntry *e;
+	const char *prog;
+	char *prog_copy = NULL;
+	int i;
+
+	if (!apps)
+		return NULL;
+
+	if (desktop_id && desktop_id[0]) {
+		size_t len = strlen(desktop_id);
+		size_t suffix = strlen(DESKTOP_SUFFIX);
+
+		if (len > suffix && strcmp(desktop_id + len - suffix, DESKTOP_SUFFIX) == 0)
+			len -= suffix;
+		WM_ITERATE_ARRAY(apps, e, i) {
+			if (strlen(e->id) == len && strncmp(e->id, desktop_id, len) == 0)
+				return e;
+		}
+	}
+	if (wm_class && wm_class[0]) {
+		WM_ITERATE_ARRAY(apps, e, i) {
+			if (e->startup_wm_class && strcasecmp(e->startup_wm_class, wm_class) == 0)
+				return e;
+		}
+		WM_ITERATE_ARRAY(apps, e, i) {
+			if (idMatchesName(e->id, wm_class))
+				return e;
+		}
+	}
+	if (wm_instance && wm_instance[0]) {
+		WM_ITERATE_ARRAY(apps, e, i) {
+			if (e->startup_wm_class && strcasecmp(e->startup_wm_class, wm_instance) == 0)
+				return e;
+		}
+		WM_ITERATE_ARRAY(apps, e, i) {
+			if (idMatchesName(e->id, wm_instance))
+				return e;
+		}
+	}
+	prog = programOf(command);
+	if (prog) {
+		prog_copy = wstrdup(prog);
+		WM_ITERATE_ARRAY(apps, e, i) {
+			const char *ep = programOf(e->exec);
+
+			if (ep && strcmp(ep, prog_copy) == 0) {
+				wfree(prog_copy);
+				return e;
+			}
+		}
+		wfree(prog_copy);
+	}
+	return NULL;
 }
 
 char *wDesktopEntryCommand(const WDesktopEntry *entry)
