@@ -60,7 +60,7 @@ typedef struct {
 	WMList *list;
 	WMFont *font;
 	WMFont *small;
-	WMArray *apps;		/* WDesktopEntry*, from wDesktopEntriesLoad */
+	WMArray *apps;		/* WDesktopEntry*, from wDesktopEntriesApplications */
 	WMArray *all;		/* QuickEntry*, every candidate */
 	WMArray *shown;		/* QuickEntry*, the filtered subset (not owned) */
 	QuickEntry *result;
@@ -111,38 +111,12 @@ static const char *workspaceName(WScreen *scr, int ws)
 	return "";
 }
 
-static const char *const *appDirs(int *count)
-{
-	static char *dirs[32];
-	static int ndirs = -1;
-
-	if (ndirs < 0) {
-		const char *home = getenv("HOME");
-		const char *data_home = getenv("XDG_DATA_HOME");
-		const char *data_dirs = getenv("XDG_DATA_DIRS");
-		char *list, *p, *save = NULL;
-
-		ndirs = 0;
-		if (data_home && data_home[0])
-			dirs[ndirs++] = wstrconcat(data_home, "/applications");
-		else if (home && home[0])
-			dirs[ndirs++] = wstrconcat(home, "/.local/share/applications");
-		list = wstrdup((data_dirs && data_dirs[0]) ? data_dirs : "/usr/local/share:/usr/share");
-		for (p = strtok_r(list, ":", &save); p && ndirs < 31; p = strtok_r(NULL, ":", &save))
-			if (p[0])
-				dirs[ndirs++] = wstrconcat(p, "/applications");
-		wfree(list);
-	}
-	*count = ndirs;
-	return (const char *const *)dirs;
-}
-
 static void collect(QuickPanel *p)
 {
 	WScreen *scr = p->scr;
 	WWindow *wwin;
 	WDesktopEntry *de;
-	int ndirs = 0, i;
+	int i;
 
 	p->all = WMCreateArrayWithDestructor(64, freeEntry);
 
@@ -163,12 +137,8 @@ static void collect(QuickPanel *p)
 		WMAddToArray(p->all, e);
 	}
 
-	/* applications */
-	{
-		const char *const *dirs = appDirs(&ndirs);
-
-		p->apps = wDesktopEntriesLoad(dirs, ndirs);
-	}
+	/* applications (the list is owned by desktopentry.c) */
+	p->apps = wDesktopEntriesApplications();
 	WM_ITERATE_ARRAY(p->apps, de, i) {
 		QuickEntry *e;
 
@@ -500,7 +470,6 @@ void wQuickPanelShow(WScreen *scr)
 	if (p->shown)
 		WMFreeArray(p->shown);
 	WMFreeArray(p->all);
-	wDesktopEntriesFree(p->apps);
 	WMReleaseFont(p->font);
 	WMReleaseFont(p->small);
 	wfree(p);

@@ -22,9 +22,16 @@
 
 #include <WINGs/WUtil.h>
 
+/* one [Desktop Action X] group: a secondary way to launch the application */
+typedef struct WDesktopAction {
+	char *id;		/* X in [Desktop Action X] */
+	char *name;		/* Name=, unlocalised */
+	char *exec;		/* Exec= with the %-field codes removed */
+} WDesktopAction;
+
 /*
  * Just enough of the Desktop Entry specification for launching things:
- * the [Desktop Entry] group of Type=Application files.
+ * the [Desktop Entry] group of Type=Application files and their actions.
  */
 typedef struct WDesktopEntry {
 	char *path;		/* file the entry was read from */
@@ -34,6 +41,8 @@ typedef struct WDesktopEntry {
 	char *try_exec;		/* TryExec= or NULL */
 	char *only_show_in;	/* raw ';'-separated list or NULL */
 	char *not_show_in;	/* raw ';'-separated list or NULL */
+	char *startup_wm_class;	/* StartupWMClass= or NULL */
+	WMArray *actions;	/* WDesktopAction*, in Actions= order; may be NULL */
 	unsigned int hidden:1;	/* Hidden=true or NoDisplay=true */
 	unsigned int terminal:1;	/* Terminal=true */
 	unsigned int autostart_disabled:1;	/* X-GNOME-Autostart-enabled=false */
@@ -47,6 +56,25 @@ typedef struct WDesktopEntry {
  */
 WMArray *wDesktopEntriesLoad(const char *const *dirs, int ndirs);
 void wDesktopEntriesFree(WMArray *entries);
+
+/*
+ * The installed applications: $XDG_DATA_HOME/applications and the
+ * applications directories of $XDG_DATA_DIRS.  Loaded on first use and
+ * reloaded when one of the directories changes; the array belongs to this
+ * module and must not be freed or kept across calls.
+ */
+WMArray *wDesktopEntriesApplications(void);
+
+/*
+ * The application entry behind a window or a docked icon, or NULL.  Tried
+ * in order: the desktop id the application advertised on its window
+ * (_KDE_NET_WM_DESKTOP_FILE / _GTK_APPLICATION_ID), StartupWMClass= equal
+ * to the class, an id equal to the class or instance (or ending in
+ * ".class", as org.kde.konsole), and finally the same program as the
+ * first word of command.  Any argument may be NULL.
+ */
+const WDesktopEntry *wDesktopEntryForApp(const char *desktop_id, const char *wm_instance,
+					 const char *wm_class, const char *command);
 
 /* a shell command to launch the entry (caller frees); honours Terminal= */
 char *wDesktopEntryCommand(const WDesktopEntry *entry);
