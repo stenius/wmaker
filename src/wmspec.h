@@ -81,6 +81,7 @@ Bool wNETWMIsSyncRequestAtom(Atom atom);
 Atom wNETWMSyncRequestAtom(void);
 void wNETWMReadSyncCounter(WWindow *wwin);
 void wNETWMReadUserTime(WWindow *wwin);
+void wNETWMReadDesktopId(WWindow *wwin);
 void wNETWMUpdateState(WWindow *wwin);
 void wNETWMReadGtkFrameExtents(WWindow *wwin);
 void wNETWMUpdateWindowType(WWindow *wwin);

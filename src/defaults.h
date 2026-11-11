@@ -52,6 +52,7 @@ char *get_icon_filename(const char *winstance, const char *wclass, const char *c
 
 
 int wDefaultGetStartWorkspace(WScreen *scr, const char *instance, const char *class);
+WMPropList *wDefaultGetQuickActions(const char *instance, const char *class);
 void wDefaultChangeIcon(const char *instance, const char* class, const char *file);
 RImage *get_rimage_from_file(WScreen *scr, const char *file_name, int max_size);
 

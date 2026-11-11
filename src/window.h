@@ -218,6 +218,7 @@ typedef struct WWindow {
 	XWMHints *wm_hints;			/* WM_HINTS (optional) */
 	char *wm_instance;			/* instance of WM_CLASS */
 	char *wm_class;				/* class of WM_CLASS */
+	char *desktop_id;			/* _KDE_NET_WM_DESKTOP_FILE / _GTK_APPLICATION_ID */
 	GNUstepWMAttributes *wm_gnustep_attr;	/* GNUstep window attributes */
 
 	int state;				/* state as in ICCCM */

@@ -55,6 +55,7 @@ typedef struct WDock {
     unsigned int rclip_button_pushed:1;
 
     struct WMenu *menu;
+    int menu_nactions;                 /* quick actions at the top of menu */
 
     struct WDDomain *defaults;
 } WDock;

@@ -45,6 +45,7 @@
 #include "actions.h"
 #include "stacking.h"
 #include "dock.h"
+#include "quickactions.h"
 #include "dockedapp.h"
 #include "dialog.h"
 #include "main.h"
@@ -3495,10 +3496,16 @@ static void openDockMenu(WDock *dock, WAppIcon *aicon, XEvent *event)
 	WObjDescriptor *desc;
 	WMenuEntry *entry;
 	WApplication *wapp = NULL;
-	int index = 0;
+	int index;
 	int x_pos;
 	int n_selected;
 	int appIsRunning = aicon->running && aicon->icon && aicon->icon->owner;
+
+	/* the application's own actions sit above the fixed entries */
+	wQuickActionsRemove(dock->menu, dock->menu_nactions);
+	dock->menu_nactions = wQuickActionsInsert(dock->menu, aicon);
+	index = dock->menu_nactions;
+	dock->menu->flags.realized = 0;
 
 	if (dock->type == WM_DOCK) {
 		/* Dock position menu */

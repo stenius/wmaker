@@ -537,6 +537,8 @@ WDefaultEntry optionList[] = {
 	    &wPreferences.hot_corners, getBool, NULL, NULL, NULL},
 	{"XDGAutostart", "NO", NULL,
 	    &wPreferences.xdg_autostart, getBool, NULL, NULL, NULL},
+	{"AppIconActions", "NO", NULL,
+	    &wPreferences.appicon_actions, getBool, NULL, NULL, NULL},
 	{"RememberWindowGeometry", "NO", NULL,
 	    &wPreferences.remember_geometry, getBool, NULL, NULL, NULL},
 	{"HotCornerDelay", "250", (void *)&wPreferences.hot_corner_delay,
